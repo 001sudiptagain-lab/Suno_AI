@@ -225,35 +225,35 @@
         switch (newState) {
           case VoiceState.CONNECTING:
             this.statusText.textContent = statusLabel || 'Connecting...';
-            this.statusText.style.color = '#1A1C4B';
+            this.statusText.style.color = 'rgba(255, 230, 240, 0.9)';
             break;
           case VoiceState.READY:
             this.statusText.textContent = statusLabel || 'Microphone Ready';
-            this.statusText.style.color = '#1A1C4B';
+            this.statusText.style.color = 'rgba(255, 230, 240, 0.9)';
             break;
           case VoiceState.LISTENING:
             this.statusText.textContent = statusLabel || 'Listening... Speak now';
-            this.statusText.style.color = '#1A1C4B';
+            this.statusText.style.color = '#ffffff';
             break;
           case VoiceState.USER_SPEAKING:
             this.statusText.textContent = statusLabel || 'Listening to you...';
-            this.statusText.style.color = '#1A1C4B';
+            this.statusText.style.color = '#ffb3ce';
             break;
           case VoiceState.THINKING:
             this.statusText.textContent = statusLabel || 'Thinking...';
-            this.statusText.style.color = '#1A1C4B';
+            this.statusText.style.color = '#ffa3c4';
             break;
           case VoiceState.AI_SPEAKING:
             this.statusText.textContent = statusLabel || '';
-            this.statusText.style.color = '#1A1C4B';
+            this.statusText.style.color = '#ffffff';
             break;
           case VoiceState.INTERRUPTED:
             this.statusText.textContent = 'Listening...';
-            this.statusText.style.color = '#1A1C4B';
+            this.statusText.style.color = '#ffb3ce';
             break;
           case VoiceState.ERROR:
             this.statusText.textContent = statusLabel || 'Connection Issue';
-            this.statusText.style.color = '#ef4444';
+            this.statusText.style.color = '#f43f85';
             break;
           default:
             this.statusText.textContent = statusLabel || '';
@@ -511,10 +511,10 @@
         ctx.globalCompositeOperation = 'screen';
 
         const circularHarmonics = [
-          // 1. Deep Royal Violet Harmonic (#7358FF)
+          // 1. Deep Wine / Radiant Fuchsia Harmonic (#e02875)
           {
-            color: 'rgba(115, 88, 255, 0.90)',
-            glow: '#7358FF',
+            color: 'rgba(224, 40, 117, 0.92)',
+            glow: '#e02875',
             radiusOffset: -5,
             freq: 3,
             speed: 0.8,
@@ -522,10 +522,10 @@
             thick: 2.4,
             phaseOffset: 0
           },
-          // 2. Glowing Neon Magenta Orbit (#FF4DB8)
+          // 2. Glowing Neon Radiant Rose (#ff4f93)
           {
-            color: 'rgba(255, 77, 184, 0.92)',
-            glow: '#FF4DB8',
+            color: 'rgba(255, 79, 147, 0.95)',
+            glow: '#ff4f93',
             radiusOffset: 0,
             freq: 4,
             speed: -0.7,
@@ -533,10 +533,10 @@
             thick: 2.2,
             phaseOffset: 1.6
           },
-          // 3. Vibrant Neon Cyan Kinetic Ring (#00D2FF)
+          // 3. Vibrant Soft Pastel Coral Pink (#ffa6cc)
           {
-            color: 'rgba(0, 210, 255, 0.95)',
-            glow: '#00D2FF',
+            color: 'rgba(255, 166, 204, 0.95)',
+            glow: '#ffa6cc',
             radiusOffset: 4,
             freq: 5,
             speed: 0.9,
@@ -544,10 +544,10 @@
             thick: 2.4,
             phaseOffset: 3.2
           },
-          // 4. Radiant Electric Mint Wave (#00FF9D)
+          // 4. Radiant Pure Rose White Wave (#ffd6e7)
           {
-            color: 'rgba(0, 255, 157, 0.96)',
-            glow: '#00FF9D',
+            color: 'rgba(255, 214, 231, 0.98)',
+            glow: '#ff7ebb',
             radiusOffset: -2,
             freq: 6,
             speed: -0.85,
@@ -593,7 +593,7 @@
         });
 
         // -------------------------------------------------------------
-        // LAYER 3: Incandescent Center Core Spine (#00FFE0 & Pure White-Cyan Glow)
+        // LAYER 3: Incandescent Center Core Spine (Rose-Pink & Pure White Glow)
         // -------------------------------------------------------------
         ctx.beginPath();
         for (let i = 0; i <= numCircleSteps; i++) {
@@ -614,17 +614,17 @@
           else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.strokeStyle = 'rgba(235, 255, 255, 0.98)';
+        ctx.strokeStyle = 'rgba(255, 245, 250, 0.98)';
         ctx.lineWidth = 2.4 * (0.9 + speechScale * 0.3);
-        ctx.shadowColor = '#00F5D4';
+        ctx.shadowColor = '#ff6ea6';
         ctx.shadowBlur = 16 * (0.8 + speechScale * 0.4);
         ctx.stroke();
 
         // Deep rich center radiant glow
         const centerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius * (0.85 + speechScale * 0.3));
-        centerGlow.addColorStop(0, 'rgba(115, 88, 255, 0.35)');
-        centerGlow.addColorStop(0.45, 'rgba(0, 210, 255, 0.20)');
-        centerGlow.addColorStop(0.8, 'rgba(0, 255, 157, 0.08)');
+        centerGlow.addColorStop(0, 'rgba(255, 79, 147, 0.38)');
+        centerGlow.addColorStop(0.45, 'rgba(224, 40, 117, 0.22)');
+        centerGlow.addColorStop(0.8, 'rgba(168, 38, 102, 0.10)');
         centerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = centerGlow;
         ctx.beginPath();
@@ -632,6 +632,14 @@
         ctx.fill();
 
         ctx.restore();
+
+        // Living audio-reactive breathing for central S emblem (if present)
+        if (this.sEmblemEl) {
+          const sScale = 0.98 + (speechScale * 0.12);
+          const sGlowBlur = 24 + (speechScale * 30);
+          this.sEmblemEl.style.transform = `scale(${sScale.toFixed(3)})`;
+          this.sEmblemEl.style.filter = `drop-shadow(0 0 ${sGlowBlur.toFixed(1)}px rgba(255, 79, 147, 0.75)) drop-shadow(0 0 ${(sGlowBlur * 1.6).toFixed(1)}px rgba(216, 69, 137, 0.45))`;
+        }
 
         this.animationFrameId = requestAnimationFrame(render);
       };
@@ -650,6 +658,10 @@
     // SESSION LIFECYCLE (START / END)
     // ==========================================
     async startLiveSession() {
+      const mainPanel = document.querySelector('.aura-main-panel');
+      if (mainPanel) {
+        mainPanel.classList.add('voice-active-mode');
+      }
       this.screen.classList.add('active');
       this.setState(VoiceState.CONNECTING, 'Initializing Microphone...');
 
@@ -685,6 +697,10 @@
 
       this.stopOrbRenderer();
       this.screen.classList.remove('active');
+      const mainPanel = document.querySelector('.aura-main-panel');
+      if (mainPanel) {
+        mainPanel.classList.remove('voice-active-mode');
+      }
       this.setState(VoiceState.IDLE);
     }
 

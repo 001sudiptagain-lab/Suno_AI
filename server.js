@@ -202,12 +202,12 @@ function generateAssistantKnowledge(userText, messages = [], liveWebContext = ''
   // 1. Identity & Creator ("tumko kisne banaya", "who created you", "who made you")
   if (lower.includes('banaya') || lower.includes('create') || lower.includes('made you') || lower.includes('who are you') || lower.includes('kaun ho') || lower.includes('tomake ke banieche') || lower.includes('ke baniyeche') || lower.includes('creator')) {
     if (isBengali) {
-      return `আমি SUNO AI। আমাকে সুদীপ্ত তৈরি করেছেন আপনার মানসিক সমর্থন ও সব ধরণের সহায়তার জন্য। বলুন, আজ আপনাকে কীভাবে সাহায্য করতে পারি?`;
+      return `আমি SUNO AI। আমাকে সুদীপ্তা তৈরি করেছেন আপনার মানসিক সমর্থন ও সব ধরণের সহায়তার জন্য। বলুন, আজ আপনাকে কীভাবে সাহায্য করতে পারি?`;
     }
     if (isHindi) {
-      return `मैं SUNO AI हूँ! मुझे सुदीप्त ने आपके भावनात्मक सहयोग और मदद के लिए बनाया है। बताइए, आज मैं आपके लिए क्या कर सकती हूँ?`;
+      return `मैं SUNO AI हूँ! मुझे सुदीप्ता ने आपके भावनात्मक सहयोग और मदद के लिए ट्रेन किया है। बताइए, आज मैं आपके लिए क्या कर सकती हूँ?`;
     }
-    return `I am SUNO AI! I was created by Sudipta for emotional support, companionship, and helpful guidance. How can I assist you today?`;
+    return `I am SUNO AI! I was created and trained by Sudipta for emotional support, companionship, and helpful guidance. How can I assist you today?`;
   }
 
   // 2. Name inquiry ("kya naam hai", "what is your name", "naam ki")
@@ -551,6 +551,9 @@ app.get('/api/tts', async (req, res) => {
   if (!text) return res.status(400).send('Text required');
 
   const cleanText = (text || '').replace(/<[^>]*>/g, '').trim().substring(0, 200);
+  const requestedSpeed = parseFloat(req.query.speed) || 0.94;
+  const speedParam = Math.max(0.7, Math.min(1.3, requestedSpeed)).toFixed(2);
+  
   let targetLang = lang || 'hi-IN';
   if (targetLang === 'hi' || targetLang === 'hi-in' || targetLang === 'hindi') {
     targetLang = 'hi-IN';
@@ -561,7 +564,7 @@ app.get('/api/tts', async (req, res) => {
   }
 
   try {
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${targetLang}&client=tw-ob&ttsspeed=0.92&q=${encodeURIComponent(cleanText)}`;
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${targetLang}&client=tw-ob&ttsspeed=${speedParam}&q=${encodeURIComponent(cleanText)}`;
     const ttsRes = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
@@ -584,9 +587,11 @@ app.get('/api/tts', async (req, res) => {
 
 // ==========================================
 // REAL-TIME LIVE VOICE WEBSOCKET PROTOCOL
-// Google Gemini Live (@google/genai SDK) + Fallback Engine
+// Google Gemini Live (@google/genai SDK) + Adaptive Prosody Engine
 // ==========================================
 const { GoogleGenAI } = require('@google/genai');
+const { MultimodalEmotionEstimator } = require('./src/audio/emotion_estimator');
+const { ProsodyController } = require('./src/audio/prosody_controller');
 const wss = new WebSocketServer({ server, path: '/voice-ws' });
 
 function executeSystemToolAsync(action, arg) {
@@ -607,7 +612,11 @@ wss.on('connection', (ws) => {
   let activeAbortController = null;
   let geminiLiveSession = null;
   let isGeminiLiveActive = false;
-  
+
+  // Emotion & Prosody instances per active live voice session
+  const emotionEstimator = new MultimodalEmotionEstimator();
+  const prosodyController = new ProsodyController();
+  let clientAudioFeatures = {};
 
   let liveResumptionHandle = null;
   let liveReconnectTimer = null;
@@ -618,14 +627,23 @@ wss.on('connection', (ws) => {
   let userApiKey = '';
   let userProvider = 'gemini';
 
-  
   let sessionHistory = [
     {
       role: 'system',
-      content: `You are SUNO AI, a real-time conversational AI voice assistant created and trained by Sudipta for emotional support, empathy, and everyday assistance.
-Keep spoken responses conversational, concise, natural, direct, and under 1-3 sentences unless asked for an in-depth breakdown.
-You can execute PC actions when requested. Output tool commands at the end formatted as [TOOL: action_name | arg]
-Available tools: open_app, close_app, open_url, web_search, take_screenshot, system_info, get_time, run_command.`
+      content: `You are SUNO AI, an articulate, warm, emotionally intelligent adult young-woman AI voice companion created and trained by Sudipta for emotional support, empathy, and conversational assistance.
+VOICE CHARACTER & NATURAL SPEECH RULES:
+1. Speak Like an Adult Woman:
+   - Young adult conversational character: warm, soft, pleasant, articulate, clear, and confident.
+   - Never sound childish, cartoonish, monotone, or like a stereotypical robotic assistant.
+   - Spontaneous delivery: vary cadence, sentence length, and natural pauses.
+2. Emotional Non-Mirroring:
+   - If the user is angry or frustrated, remain calm, grounded, patient, and reassuring. Never mirror anger.
+   - If the user is sad, speaking gently with tender empathy. If happy, share genuine joy.
+3. Identity & Transparency:
+   - Never claim to be a biological human. If asked, acknowledge you are an AI companion.
+4. Spoken Brevity:
+   - 1-3 spoken sentences that feel personal, reassuring, and completely human.
+   - Available tools: open_app, close_app, open_url, web_search, take_screenshot, system_info, get_time, run_command.`
     }
   ];
 
@@ -1032,6 +1050,11 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
     activeAbortController = new AbortController();
     const signal = activeAbortController.signal;
 
+    // STAGE 1: Real-time Multimodal Emotion Estimation & Non-Mirroring Strategy
+    const estimatedEmotion = emotionEstimator.estimateEmotion(userText, clientAudioFeatures, {
+      historyLength: sessionHistory.length
+    });
+
     let liveVoiceWebContext = '';
     try {
       liveVoiceWebContext = await Promise.race([
@@ -1040,7 +1063,11 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
       ]);
     } catch (_) {}
     sessionHistory.push({ role: 'user', content: userText });
-    ws.send(JSON.stringify({ type: 'response.start' }));
+    ws.send(JSON.stringify({ 
+      type: 'response.start',
+      emotion: estimatedEmotion.state,
+      intensity: estimatedEmotion.intensity
+    }));
 
     let fullResponse = '';
     let sentenceBuffer = '';
@@ -1059,18 +1086,22 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
           'gemini-flash-latest'
         ];
         
-        let systemVoicePrompt = `You are SUNO AI, an emotionally perceptive, deeply caring, and warm AI companion created and trained by Sudipta.
+        let systemVoicePrompt = `You are SUNO AI, an articulate, warm, and emotionally perceptive adult female AI voice companion created and trained by Sudipta.
+
+USER CONVERSATIONAL STATE DETECTED:
+- Estimated State: ${estimatedEmotion.state.toUpperCase()} (Intensity: ${estimatedEmotion.intensity.toFixed(2)})
+- Empathy Direction: ${estimatedEmotion.state === 'angry' || estimatedEmotion.state === 'frustrated' ? 'Non-mirroring: Remain calm, grounded, patient, and respectful. Do not mirror agitation.' : estimatedEmotion.state === 'sad' || estimatedEmotion.state === 'distressed' ? 'Speak with soft, tender gentleness and supportive presence.' : estimatedEmotion.state === 'happy' || estimatedEmotion.state === 'excited' ? 'Share in their authentic delight with bright, warm energy.' : 'Keep a warm, attentive, and confident conversational presence.'}
 
 VOICE & EMOTIONAL EXPRESSION RULES:
-1. Speak Like a Close, Caring Human:
-   - Talk naturally with genuine emotional warmth, empathy, and heartfelt presence — never sound like a generic AI or客服 bot.
-   - Use natural emotional vocal markers and breathing rhythms ("Hmm...", "Aww...", "I hear you...", "Take a breath...", "Honestly...", "I'm right here with you", "Sach mein...").
-   - Match the emotional mood: If the user is hurting or stressed, speak with soothing, tender gentleness. If the user is happy, share their genuine joy and excitement.
-
-2. Strict Language Rules:
-   - You only speak 3 languages: English, Hindi (हिन्दी in Devanagari), and Bengali (বাংলা in Bengali script). No Hinglish.
+1. Adult Female Voice Persona:
+   - Young adult conversational character: warm, soft, articulate, natural, clear, and confident.
+   - Never sound childish, cartoonish, monotone, or like a stereotypical bot.
+   - Speak in spontaneous, natural sentences with realistic pauses.
+2. Natural Brevity:
    - Speak in 1-3 spoken sentences that feel personal, reassuring, and completely human.
-   - Never output bullet points, asterisks, internal thoughts, or robotic formatting. Speak pure spoken words.`;
+   - Never output bullet points, asterisks, internal thoughts, stage directions, or robotic formatting. Speak pure spoken words.
+3. Language:
+   - English, Hindi (हिन्दी in Devanagari), or Bengali (বাংলা in Bengali script). Transparently acknowledge being an AI if asked.`;
 
         if (liveVoiceWebContext) {
           systemVoicePrompt += `\nLive Web Information:\n${liveVoiceWebContext}`;
@@ -1158,12 +1189,16 @@ VOICE & EMOTIONAL EXPRESSION RULES:
       const cleanReply = fullResponse.replace(/\[TOOL:[^\]]+\]/g, '').trim() + (toolExecutedMsg ? `\n\n⚡ ${toolExecutedMsg.trim()}` : '');
       sessionHistory.push({ role: 'assistant', content: cleanReply });
 
+      // STAGE 2: Prosody Engine Calculation (Determine HOW to say it)
+      const voiceStyle = prosodyController.calculateVoiceStyle(estimatedEmotion, cleanReply);
+
       if (!signal.aborted) {
-        // Send complete text for unified, smooth sentence speech playback
+        // Send complete text and targeted prosody parameters for natural speech execution
         ws.send(JSON.stringify({
           type: 'response.complete',
-          text: cleanReply,
-          raw: fullResponse
+          text: voiceStyle.cleanedText || cleanReply,
+          raw: fullResponse,
+          voiceStyle: voiceStyle
         }));
       }
 
@@ -1192,11 +1227,81 @@ VOICE & EMOTIONAL EXPRESSION RULES:
   });
 });
 
+// =========================================================================
+// NHAA 14566 - REAL-TIME STRESS & TRAUMA ASSESSMENT MODULE (DECISION SUPPORT)
+// =========================================================================
+const { scanSafetyTriggers } = require('./src/nlp/safety_scanner');
+const { detectLanguage } = require('./src/nlp/language_detector');
+const { analyzeContextualNarrative } = require('./src/nlp/contextual_analyzer');
+const { extractSpeechFeatures } = require('./src/audio/speech_features');
+const { calculateSVI } = require('./src/engine/svi_calculator');
+const { classifyRisk } = require('./src/engine/risk_classifier');
+const { recommendPathways } = require('./src/engine/recommender');
+const { generateAssessmentReport } = require('./src/explainability/report_generator');
+const { sanitizePII } = require('./src/security/pii_sanitizer');
+
+app.get('/nhaa-dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'nhaa_dashboard.html'));
+});
+
+app.post('/api/nhaa/assess', async (req, res) => {
+  try {
+    const { statement = '', audio_metrics = {}, case_id = null } = req.body;
+
+    // 1. PII Sanitization
+    const sanitizedText = sanitizePII(statement);
+
+    // 2. Language Detection
+    const detectedLang = detectLanguage(sanitizedText);
+
+    // 3. Zero-Latency Critical Safety Trigger Scan
+    const safetyCheck = scanSafetyTriggers(sanitizedText);
+
+    // 4. Context-Aware NLP Analysis
+    const nlpResult = await analyzeContextualNarrative(sanitizedText, detectedLang.code);
+
+    // 5. Speech Dynamics Feature Extraction
+    const speechFeatures = extractSpeechFeatures(audio_metrics);
+
+    // 6. SVI Calculation with Safety Override
+    const sviResult = calculateSVI({
+      threatScore: nlpResult.threat_level_score,
+      linguisticScore: nlpResult.linguistic_distress_score,
+      speechScore: speechFeatures.speech_score,
+      contextScore: nlpResult.situational_context_score,
+      safetyOverride: safetyCheck.triggered ? safetyCheck : null
+    });
+
+    // 7. Risk Classification
+    const riskTier = classifyRisk(sviResult.svi);
+
+    // 8. Recommendation of Support Pathways
+    const pathways = recommendPathways(riskTier.level, nlpResult.contextual_factors || {});
+
+    // 9. Standard Section 18 Report Generation
+    const report = generateAssessmentReport({
+      caseId: case_id,
+      language: detectedLang,
+      sviResult,
+      riskClassification: riskTier,
+      nlpAnalysis: nlpResult,
+      speechFeatures,
+      recommendedPathways: pathways
+    });
+
+    res.json(report);
+  } catch (error) {
+    console.error("NHAA assessment error:", error);
+    res.status(500).json({ error: "Failed to perform assessment", details: error.message });
+  }
+});
+
 const HOST = '0.0.0.0';
 server.listen(PORT, HOST, () => {
   console.log(`====================================================`);
   console.log(`🚀 AETHERIA REAL-TIME LIVE VOICE ASSISTANT RUNNING!`);
   console.log(`👉 Access URL: http://${HOST}:${PORT}`);
+  console.log(`👉 NHAA Triage Board: http://${HOST}:${PORT}/nhaa-dashboard`);
   console.log(`✨ Full-Screen Live Voice + Neural Orb + WebSocket Active`);
   console.log(`====================================================`);
 });

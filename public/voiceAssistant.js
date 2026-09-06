@@ -617,11 +617,11 @@
                 this._hasSpokenIntro = true;
                 this._setState(VoiceState.AI_SPEAKING);
                 
-                let introGreeting = "नमस्ते! मैं SUNO AI हूँ। मुझे सुदीप्त ने आपके भावनात्मक सहयोग और बातचीत के लिए बनाया है। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?";
+                let introGreeting = "नमस्ते! मैं SUNO AI हूँ। मुझे सुदीप्ता ने आपके भावनात्मक सहयोग और बातचीत के लिए ट्रेन किया है। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?";
                 if (this.selectedLang === 'en-US') {
-                  introGreeting = "Hello! I am SUNO AI, your compassionate companion. How can I support you today?";
+                  introGreeting = "Hello! I am SUNO AI, your compassionate companion. I was trained and created by Sudipta. How can I support you today?";
                 } else if (this.selectedLang === 'bn-IN') {
-                  introGreeting = "নমস্কার! আমি SUNO AI। আমাকে সুদীপ্ত তৈরি করেছেন আপনার মানসিক সমর্থন ও বন্ধুত্বের জন্য। বলুন, আজ আপনাকে কীভাবে সাহায্য করতে পারি?";
+                  introGreeting = "নমস্কার! আমি SUNO AI। আমাকে সুদীপ্তা তৈরি করেছেন আপনার মানসিক সমর্থন ও বন্ধুত্বের জন্য। বলুন, আজ আপনাকে কীভাবে সাহায্য করতে পারি?";
                 }
                 this._lastAssistantSpokenText = introGreeting;
                 this._emitTranscript('assistant', introGreeting, true);
@@ -685,9 +685,12 @@
 
             case 'response.complete':
               this._emitTranscript('assistant', msg.text, true);
+              if (msg.voiceStyle) {
+                this.currentVoiceStyle = msg.voiceStyle;
+              }
               // Only enqueue if not already queued via response.audio_chunk
               if (msg.text && this.fallbackSpeechQueue.length === 0 && !this.isFallbackPlaying) {
-                this._enqueueFallbackTTSChunk(msg.text);
+                this._enqueueFallbackTTSChunk(msg.text, msg.voiceStyle);
               } else if (!this.isFallbackPlaying && this.fallbackSpeechQueue.length === 0) {
                 this._setState(VoiceState.LISTENING);
               }
@@ -1182,9 +1185,25 @@
       } catch (e) {}
 
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95; 
-      utterance.volume = 1.0;
-      utterance.pitch = 1.08; // Consistent gentle female pitch
+      const style = this.currentVoiceStyle || {};
+      
+      // Dynamic Prosody Parameter Application
+      // Default: ~0.98 natural rate, 1.06 pleasant adult female pitch
+      const targetRate = (style.speakingRate && style.speakingRate > 0.6 && style.speakingRate < 1.4) 
+        ? style.speakingRate 
+        : (this.options.speechSpeed || 0.98);
+      
+      const targetPitch = (style.pitch && style.pitch > 0.8 && style.pitch < 1.4) 
+        ? style.pitch 
+        : 1.06;
+
+      const targetVolume = (style.energy && style.energy > 0.2) 
+        ? Math.min(1.0, style.energy + 0.25) 
+        : 1.0;
+
+      utterance.rate = Number(targetRate.toFixed(2));
+      utterance.pitch = Number(targetPitch.toFixed(2));
+      utterance.volume = Number(targetVolume.toFixed(2));
 
       // Auto-detect language strictly: Bengali (বাংলা), Hindi (हिन्दी), or English
       const isBengaliText = /[\u0980-\u09FF]/.test(text) || /\b(tumi|tomar|kemon|achen|korecho|banalo|kothay|shuncho|aajke|ekhon|bhalo|apni|apnar)\b/i.test(text);
@@ -1240,7 +1259,8 @@
         console.log(`[VoiceAssistant TTS] Device has no native ${ttsLang} voice. Streaming via backend proxy.`);
         try {
           const encoded = encodeURIComponent(text.substring(0, 300));
-          const audioUrl = `/api/tts?lang=${ttsLang}&text=${encoded}`;
+          const speedArg = targetRate ? `&speed=${targetRate}` : '';
+          const audioUrl = `/api/tts?lang=${ttsLang}&text=${encoded}${speedArg}`;
           this._initAudioOutput();
           const audio = new Audio(audioUrl);
           audio.crossOrigin = 'anonymous';

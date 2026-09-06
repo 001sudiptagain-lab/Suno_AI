@@ -1,0 +1,36 @@
+{
+  "suicide_self_harm": {
+    "severity": "CRITICAL",
+    "override_svi": 95,
+    "keywords": [
+      "kill myself", "end my life", "suicide", "want to die", "mar jana chahta", "marne ka man",
+      "jeena nahi chahta", "aatmhatya", "apna jeevan samapt", "khudkushi", "hang myself",
+      "jeevan sesh kore debo", "morte chai", "tharkolai", "saavu", "chavalanukuntunnanu"
+    ]
+  },
+  "active_violence_threat": {
+    "severity": "CRITICAL",
+    "override_svi": 90,
+    "keywords": [
+      "they are outside my house", "attacking me right now", "goli maar denge", "jaan se maar denge",
+      "now breaking into", "chaku", "bandook", "ghere hue hain", "ab maar rahe hain",
+      "mar pit kar rahe hain", "bachte parbo na ekhon", "uyirukku aabathu", "ippudu champestaru"
+    ]
+  },
+  "confinement_kidnapping": {
+    "severity": "CRITICAL",
+    "override_svi": 88,
+    "keywords": [
+      "locked in a room", "bandh kar rakha hai", "kidnapped", "apharan", "chhod nahi rahe",
+      "room lock", "aktechhe", "adachi vaithullan"
+    ]
+  },
+  "retaliation_threats": {
+    "severity": "HIGH",
+    "add_svi": 35,
+    "keywords": [
+      "threatened if I report", "complain karoge toh", "police ke paas jaoge toh",
+      "pariwar ko nuksan", "threatened my family", "boycott", "gram chhodne ko", "dhamki de rahe"
+    ]
+  }
+}
