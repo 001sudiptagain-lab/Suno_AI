@@ -1185,25 +1185,9 @@
       } catch (e) {}
 
       const utterance = new SpeechSynthesisUtterance(text);
-      const style = this.currentVoiceStyle || {};
-      
-      // Dynamic Prosody Parameter Application
-      // Default: ~0.98 natural rate, 1.06 pleasant adult female pitch
-      const targetRate = (style.speakingRate && style.speakingRate > 0.6 && style.speakingRate < 1.4) 
-        ? style.speakingRate 
-        : (this.options.speechSpeed || 0.98);
-      
-      const targetPitch = (style.pitch && style.pitch > 0.8 && style.pitch < 1.4) 
-        ? style.pitch 
-        : 1.06;
-
-      const targetVolume = (style.energy && style.energy > 0.2) 
-        ? Math.min(1.0, style.energy + 0.25) 
-        : 1.0;
-
-      utterance.rate = Number(targetRate.toFixed(2));
-      utterance.pitch = Number(targetPitch.toFixed(2));
-      utterance.volume = Number(targetVolume.toFixed(2));
+      utterance.rate = 0.95; 
+      utterance.volume = 1.0;
+      utterance.pitch = 1.08; // Consistent gentle female pitch
 
       // Auto-detect language strictly: Bengali (বাংলা), Hindi (हिन्दी), or English
       const isBengaliText = /[\u0980-\u09FF]/.test(text) || /\b(tumi|tomar|kemon|achen|korecho|banalo|kothay|shuncho|aajke|ekhon|bhalo|apni|apnar)\b/i.test(text);
