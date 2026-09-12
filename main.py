@@ -23,7 +23,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 SERVER_SCRIPT = BASE_DIR / "server.js"
 GUI_SCRIPT = BASE_DIR / "app_gui.py"
-PORT = 3000
+PORT = int(os.environ.get("PORT", 5000))
 
 def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

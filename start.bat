@@ -29,7 +29,7 @@ start "" node server.js
 echo [4/4] Launching ChatGPT Web App...
 start "" python app_gui.py
 timeout /t 1 >nul
-start http://localhost:3000
+start http://localhost:5000
 
 echo.
 echo ========================================================

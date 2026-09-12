@@ -470,6 +470,11 @@ document.addEventListener('DOMContentLoaded', () => {
     activeMessages.push({ role: 'user', content: text });
     renderMessage('user', text);
 
+    // Synchronize Live Analysis & SVI panel if active
+    if (window.liveVoiceInstance && typeof window.liveVoiceInstance.updateTelemetryAnalysis === 'function') {
+      window.liveVoiceInstance.updateTelemetryAnalysis(text);
+    }
+
     isGenerating = true;
     updateSendBtnState();
 

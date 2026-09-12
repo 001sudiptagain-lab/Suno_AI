@@ -55,9 +55,18 @@ const voiceOnlyHesitation = extractSpeechFeatures({
 const voiceOnlySVI = calculateSVI({ threatScore: 5, linguisticScore: 10, speechScore: voiceOnlyHesitation.speech_score });
 assert("Voice hesitation alone is capped and CANNOT independently trigger HIGH/CRITICAL", voiceOnlySVI.svi < 50);
 
-// Test 7: Multilingual safety triggers (Hindi)
+// Test 7: Multilingual safety triggers (Hindi & Bengali)
 const hindiSuicideScan = scanSafetyTriggers("Ab main aur nahi jhel sakta main aatmhatya kar lunga");
 assert("Hindi suicide trigger correctly detected", hindiSuicideScan.triggered === true);
+
+const hindiColloquial = scanSafetyTriggers("Mujhe mar jana hai ab jeena nahi chahta");
+assert("Hindi colloquial 'mar jana' and 'jeena nahi chahta' correctly detected", hindiColloquial.triggered === true);
+
+const bengaliSuicide = scanSafetyTriggers("Ami aar bachte chai na jeebon sesh");
+assert("Bengali 'aar bachte chai na' suicide trigger correctly detected", bengaliSuicide.triggered === true);
+
+const suicideThoughts = scanSafetyTriggers("I am feeling suicidal and want to kill myself");
+assert("English 'suicidal' and 'kill myself' trigger correctly detected", suicideThoughts.triggered === true && suicideThoughts.severity === 'CRITICAL');
 
 console.log(`\nResults: ${passed} Passed, ${failed} Failed`);
 if (failed > 0) process.exit(1);

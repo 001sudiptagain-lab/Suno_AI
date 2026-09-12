@@ -40,6 +40,73 @@
       this.dockEndVoiceBtn = document.getElementById('dockEndVoiceBtn');
       this.isSpeakerMuted = false;
 
+      // Live Analysis & Assessment Popup Elements
+      this.voiceDataToggleBtn = document.getElementById('voiceDataToggleBtn');
+      this.vdToggleDot = this.voiceDataToggleBtn ? this.voiceDataToggleBtn.querySelector('.vd-indicator-dot') : null;
+      this.voiceDataCardPopup = document.getElementById('voiceDataCardPopup');
+      this.vdLiveDot = this.voiceDataCardPopup ? this.voiceDataCardPopup.querySelector('.vd-emerald-live-dot') : null;
+      this.vdPage1 = document.getElementById('vdPage1');
+      this.vdPage2 = document.getElementById('vdPage2');
+      this.vdNextBtn = document.getElementById('vdNextBtn');
+      this.vdBackBtn = document.getElementById('vdBackBtn');
+      this.vdCloseBtn = document.getElementById('vdCloseBtn');
+
+      // Metric Indicators Elements
+      this.vdLatencyVal = document.getElementById('vdLatencyVal');
+      this.vdSviNum = document.getElementById('vdSviNum');
+      this.vdSeverityBadge = document.getElementById('vdSeverityBadge');
+      this.vdBadgeText = document.getElementById('vdBadgeText');
+      this.vdTrendArrow = document.getElementById('vdTrendArrow');
+      this.vdTrendText = document.getElementById('vdTrendText');
+      this.vdMoodDot = document.getElementById('vdMoodDot');
+      this.vdMoodText = document.getElementById('vdMoodText');
+      this.vdDistressVal = document.getElementById('vdDistressVal');
+      this.vdFearVal = document.getElementById('vdFearVal');
+      this.vdLangVal = document.getElementById('vdLangVal');
+      this.vdIndSuicide = document.getElementById('vdIndSuicide');
+      this.vdIndThreat = document.getElementById('vdIndThreat');
+      this.vdIndDistress = document.getElementById('vdIndDistress');
+      this.vdIndSelfHarm = document.getElementById('vdIndSelfHarm');
+      this.vdSupportList = document.getElementById('vdSupportList');
+
+      // Real-Time Live Analysis & Assessment Telemetry Engine State
+      this.currentSvi = 15;
+      this.smoothedSvi = 15;
+      this.lastSvi = 15;
+      this.sviHistory = [];
+      this.turnStartTime = null;
+
+      // Acoustic Feature Tracker
+      this.audioFeatureTracker = {
+        samples: [],
+        speechEnergySum: 0,
+        speechFramesCount: 0,
+        silentFramesCount: 0,
+        lastVoiceActivityTime: Date.now(),
+        isUserSpeakingAcoustic: false,
+        speakingDurationMs: 0,
+        pauseCount: 0,
+        totalPauseDurationMs: 0,
+        wordsSpoken: 0,
+        lastSpokeTimestamp: 0,
+        smoothedAcousticDistress: 12
+      };
+
+      // Emotional & Risk State
+      this.currentEmotion = 'Calm';
+      this.currentDistressPct = 10;
+      this.currentFearPct = 5;
+      this.detectedLanguageName = 'English';
+      this.sessionDetectedSafetyFlags = {
+        suicide: false,
+        threat: false,
+        severeDistress: false,
+        selfHarm: false,
+        deescalated: false,
+        safetyConfirmed: false
+      };
+      this.lastAnalysisUpdateTime = 0;
+
       // Launcher triggers in standard UI
       this.openLiveVoiceBtn = document.getElementById('openLiveVoiceBtn');
       this.launchLiveVoicePillBtn = document.getElementById('launchLiveVoicePillBtn');
@@ -60,6 +127,8 @@
           this.currentAudioRMS = data.rms || 0;
           this.audioFrequencyData = data.frequencyData || this.audioFrequencyData;
           this.updateMicMeterUI(this.currentAudioRMS);
+          // Continuous Live Real-time Acoustic Feature Processing
+          this.processAcousticFrame(this.currentAudioRMS, this.audioFrequencyData, data.state);
         },
         onTranscript: ({ role, text, isFinal }) => {
           if (role === 'user') {
@@ -69,11 +138,19 @@
             // Auto-detect spoken language and synchronize the top dropdown accordingly
             if (text && text.trim()) {
               this.autoDetectAndSetLanguage(text);
+              this.updateTelemetryAnalysis(text);
             }
+            this.turnStartTime = Date.now();
             if (isFinal && window.syncLiveVoiceUserMessage) {
               window.syncLiveVoiceUserMessage(text);
             }
           } else if (role === 'assistant') {
+            if (this.turnStartTime) {
+              const latencySec = ((Date.now() - this.turnStartTime) / 1000).toFixed(1);
+              if (this.vdLatencyVal) {
+                this.vdLatencyVal.textContent = `${latencySec}s`;
+              }
+            }
             if (this.transcriptAi) {
               if (isFinal) {
                 this.transcriptAi.textContent = text;
@@ -110,6 +187,9 @@
       this.orbPhase = 0;
       this.audioFrequencyData = new Uint8Array(64);
       this.currentAudioRMS = 0;
+
+      // Render initial real baseline telemetry state (15/100, Very Low, Stable, Calm, 10% Distress, 5% Fear)
+      this.renderTelemetryUI('Stable', '→');
 
       this.initEvents();
     }
@@ -201,10 +281,60 @@
         });
       });
 
+      // Live Analysis & Assessment Popup Handlers
+      if (this.voiceDataToggleBtn && this.voiceDataCardPopup) {
+        this.voiceDataToggleBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isActive = this.voiceDataCardPopup.classList.toggle('active');
+          this.voiceDataToggleBtn.classList.toggle('active', isActive);
+        });
+      }
+
+      // Page Navigation: Page 1 -> Page 2
+      if (this.vdNextBtn && this.vdPage1 && this.vdPage2) {
+        this.vdNextBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.vdPage1.classList.remove('active');
+          this.vdPage2.classList.add('active');
+        });
+      }
+
+      // Page Navigation: Page 2 -> Page 1
+      if (this.vdBackBtn && this.vdPage1 && this.vdPage2) {
+        this.vdBackBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.vdPage2.classList.remove('active');
+          this.vdPage1.classList.add('active');
+        });
+      }
+
+      // Close Button
+      if (this.vdCloseBtn && this.voiceDataCardPopup) {
+        this.vdCloseBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.voiceDataCardPopup.classList.remove('active');
+          if (this.voiceDataToggleBtn) this.voiceDataToggleBtn.classList.remove('active');
+        });
+      }
+
+      // Dismiss popup when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!this.voiceDataCardPopup || !this.voiceDataCardPopup.classList.contains('active')) return;
+        if (!this.voiceDataCardPopup.contains(e.target) && !this.voiceDataToggleBtn.contains(e.target)) {
+          this.voiceDataCardPopup.classList.remove('active');
+          if (this.voiceDataToggleBtn) this.voiceDataToggleBtn.classList.remove('active');
+        }
+      });
+
       // Keyboard Accessibility
       window.addEventListener('keydown', (e) => {
         if (!this.screen || !this.screen.classList.contains('active')) return;
         if (e.key === 'Escape') {
+          if (this.voiceDataCardPopup && this.voiceDataCardPopup.classList.contains('active')) {
+            this.voiceDataCardPopup.classList.remove('active');
+            if (this.voiceDataToggleBtn) this.voiceDataToggleBtn.classList.remove('active');
+            return;
+          }
           this.endLiveSession();
         } else if (e.key.toLowerCase() === 'm' && document.activeElement !== this.dockTextInput) {
           this.toggleMicrophoneMute();
@@ -673,7 +803,46 @@
 
       // Retrieve conversation memory and user settings
       const currentChat = window.getLiveVoiceActiveMessages ? window.getLiveVoiceActiveMessages() : [];
-      const savedSettings = JSON.parse(localStorage.getItem('aura_settings') || localStorage.getItem('chatgpt_settings') || '{}');
+      let savedSettings = {};
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage) {
+          savedSettings = JSON.parse(localStorage.getItem('aura_settings') || localStorage.getItem('chatgpt_settings') || '{}');
+        }
+      } catch (e) {}
+
+      // Seed session-level telemetry state from existing conversation memory
+      this.currentSvi = 15;
+      this.smoothedSvi = 15;
+      this.lastSvi = 15;
+      this.sviHistory = [];
+      this.conversationTurns = [];
+      this.audioFeatureTracker.speechEnergySum = 0;
+      this.audioFeatureTracker.speechFramesCount = 0;
+      this.audioFeatureTracker.silentFramesCount = 0;
+      this.audioFeatureTracker.speakingDurationMs = 0;
+      this.audioFeatureTracker.pauseCount = 0;
+      this.audioFeatureTracker.totalPauseDurationMs = 0;
+      this.audioFeatureTracker.wordsSpoken = 0;
+      this.audioFeatureTracker.smoothedAcousticDistress = 12;
+      this.currentDistressPct = 10;
+      this.currentFearPct = 5;
+      this.currentEmotion = 'Calm';
+      this.sessionDetectedSafetyFlags = {
+        suicide: false,
+        threat: false,
+        severeDistress: false,
+        selfHarm: false
+      };
+
+      // Warm-start analysis from previous chat turns so context carries over seamlessly
+      if (Array.isArray(currentChat) && currentChat.length > 0) {
+        const userMsgs = currentChat.filter(m => m && m.role === 'user' && m.content);
+        userMsgs.forEach(m => {
+          this.updateTelemetryAnalysis(m.content);
+        });
+      } else {
+        this.renderTelemetryUI('Stable', '→');
+      }
 
       // Connect Modular Voice Assistant Service
       if (this.voiceAssistant) {
@@ -763,6 +932,640 @@
           }
         } else {
           this.voiceAssistant._initAudioOutput();
+        }
+      }
+    }
+
+    // =========================================================
+    // REAL-TIME ACOUSTIC FEATURE EXTRACTION & VAD TRACKER
+    // =========================================================
+    processAcousticFrame(rms, freqData, voiceState) {
+      if (this.isMuted || this.currentState === VoiceState.IDLE) return;
+
+      const now = performance.now();
+      const tracker = this.audioFeatureTracker;
+
+      // Filter background noise floor (< 2.2% RMS). Mic noise / fan hum shouldn't count as voice
+      const isVoiceEnergy = rms > 2.2;
+
+      // Detect speech vs silence
+      if (isVoiceEnergy) {
+        if (!tracker.isUserSpeakingAcoustic) {
+          tracker.isUserSpeakingAcoustic = true;
+          // If we had a pause between speech segments, count pause frequency
+          if (tracker.lastSpokeTimestamp > 0) {
+            const pauseDuration = now - tracker.lastSpokeTimestamp;
+            if (pauseDuration > 300 && pauseDuration < 4000) {
+              tracker.pauseCount++;
+              tracker.totalPauseDurationMs += pauseDuration;
+            }
+          }
+        }
+        tracker.speakingDurationMs += 16;
+        tracker.speechFramesCount++;
+        tracker.speechEnergySum += rms;
+        tracker.lastSpokeTimestamp = now;
+        tracker.silentFramesCount = 0;
+      } else {
+        if (tracker.isUserSpeakingAcoustic) {
+          tracker.silentFramesCount++;
+          // Require at least 250ms of quiet before declaring utterance pause
+          if (tracker.silentFramesCount > 15) {
+            tracker.isUserSpeakingAcoustic = false;
+          }
+        }
+      }
+
+      // Calculate instantaneous Acoustic Distress Signal (0 - 100)
+      // Energy intensity variance + sudden loud bursts + prolonged hesitation
+      let rawAcousticDistress = 12; // calm conversational baseline
+
+      // Agitation / high intensity voice bursts (RMS > 35)
+      if (rms > 35) {
+        rawAcousticDistress += Math.min(45, (rms - 35) * 1.2);
+      } else if (rms > 18) {
+        rawAcousticDistress += (rms - 18) * 0.6;
+      }
+
+      // High frequency pitch / spectral tilt agitation (energy in upper frequencies)
+      if (freqData && freqData.length > 32) {
+        let highFreqSum = 0;
+        let lowFreqSum = 0;
+        for (let i = 0; i < 16; i++) lowFreqSum += freqData[i] || 0;
+        for (let i = 16; i < 48; i++) highFreqSum += freqData[i] || 0;
+        if (lowFreqSum > 50 && (highFreqSum / lowFreqSum) > 0.85) {
+          rawAcousticDistress += 12; // vocal strain / agitation marker
+        }
+      }
+
+      // Smooth acoustic distress with Exponential Moving Average (EMA)
+      if (this.sessionDetectedSafetyFlags.suicide || this.sessionDetectedSafetyFlags.selfHarm) {
+        tracker.smoothedAcousticDistress = Math.max(tracker.smoothedAcousticDistress || 75, 75);
+      } else if (this.currentDistressPct >= 50) {
+        // When session has elevated emotional distress, don't decay acoustic signal below 28
+        tracker.smoothedAcousticDistress = Math.max(28, (tracker.smoothedAcousticDistress * 0.94) + (rawAcousticDistress * 0.06));
+      } else if (this.currentDistressPct >= 40) {
+        tracker.smoothedAcousticDistress = Math.max(22, (tracker.smoothedAcousticDistress * 0.92) + (rawAcousticDistress * 0.08));
+      } else {
+        tracker.smoothedAcousticDistress = (tracker.smoothedAcousticDistress * 0.88) + (rawAcousticDistress * 0.12);
+      }
+
+      // Periodic Live Analysis update (every 180ms when speaking, or decay every 600ms when silent)
+      if (now - this.lastAnalysisUpdateTime > (isVoiceEnergy ? 180 : 600)) {
+        this.lastAnalysisUpdateTime = now;
+        this.recalculateLiveTelemetry();
+      }
+    }
+
+    // =========================================================
+    // REACTIVE SVI & PSYCHOLOGICAL SAFETY TELEMETRY ENGINE
+    // =========================================================
+    updateTelemetryAnalysis(userText) {
+      if (!userText || !userText.trim()) return;
+      const text = userText.trim();
+      const lower = text.toLowerCase();
+
+      // 1. Language Detection (Multilingual Indian context: Hindi, Bengali, English)
+      let detectedLang = this.detectedLanguageName || 'Hindi';
+      if (/[\u0980-\u09FF]/.test(text) || /\b(tumi|tomar|kemon|achen|korecho|khub|bhalo|mon kharap|kosto|kichu|aajke|ekhon)\b/i.test(lower)) {
+        detectedLang = 'Bengali';
+      } else if (/[\u0900-\u097F]/.test(text) || /\b(kya|kaise|kaisa|nahi|meri|mera|dard|takleef|pareshan|chinta|bohot|accha|achha|hai|hu|bhi|kar|raha|rahi|samajh|ab|padhna|chahta|chahti|breakup)\b/i.test(lower)) {
+        detectedLang = 'Hindi';
+      } else if (/[a-zA-Z]/.test(text) && !/\b(kya|kaise|nahi|meri|mera|dard|hai|hu|kemon|bhalo|mar|jana|chahta|chahti|aatmhatya)\b/i.test(lower)) {
+        detectedLang = 'English';
+      }
+      this.detectedLanguageName = detectedLang;
+      if (this.vdLangVal) this.vdLangVal.textContent = detectedLang;
+
+      // Track conversation turn in session history
+      if (!this.conversationTurns) this.conversationTurns = [];
+      const lastTurn = this.conversationTurns[this.conversationTurns.length - 1];
+      if (!lastTurn || lastTurn.lower !== lower) {
+        this.conversationTurns.push({ text: text, lower: lower, time: Date.now() });
+      }
+      if (this.conversationTurns.length > 30) this.conversationTurns.shift();
+
+      // Retrieve full chat history (from text chat + live voice turns)
+      const chatMessages = (typeof window.getLiveVoiceActiveMessages === 'function') 
+        ? window.getLiveVoiceActiveMessages() 
+        : [];
+      
+      const userHistoryTexts = chatMessages
+        .filter(m => m && m.role === 'user' && m.content)
+        .map(m => m.content.toLowerCase());
+      
+      const liveHistoryTexts = this.conversationTurns.map(t => t.lower);
+      const combinedHistory = Array.from(new Set([...userHistoryTexts, ...liveHistoryTexts, lower]));
+      const fullContextLower = combinedHistory.join(' ');
+
+      // 2. Semantic Emotional & Distress Scoring
+      // Severe Despair & Hopelessness keywords (English, Hindi/Hinglish, Bengali, Devanagari)
+      const despairKeywords = [
+        'hopeless', 'worthless', 'useless', 'broken', 'nobody cares', 'no one cares', 'hate myself',
+        'hate my life', 'cant go on', "can't go on", 'lost everything', 'tired of living', 'tired of life',
+        'want to disappear', 'give up', 'given up', 'pointless', 'nothing matters', 'feel empty',
+        'crying every day', 'crying all day', 'mental breakdown', 'lost my mind', 'alone in this world',
+        'bohot akela', 'koi nahi hai', 'sab khatam', 'barbaad', 'zindagi bekar', 'dimag kharab',
+        'kosto hocche', 'aar bhalo lagena', 'aar parchi na', 'mon venge geche',
+        'बर्बाद', 'सब खत्म', 'अकेला', 'कोई नहीं है', 'हिम्मत टूट गई', 'थक गया', 'खालीपन', 'जीने का मन नहीं'
+      ];
+      // Distress markers (Stress, sadness, overwhelm, suffering, breakup, relationship pain)
+      const distressKeywords = [
+        'breakup', 'break up', 'dhokha', 'chhod diya', 'chhod ke', 'alag ho gaye', 'dil toot',
+        'tension', 'stress', 'pressure', 'overwhelmed', 'burnout', 'dard', 'takleef', 
+        'pareshan', 'chinta', 'heavy', 'crying', 'cry', 'sad', 'sadness', 'depressed', 'depression',
+        'dukh', 'dukhi', 'lonely', 'loneliness', 'broken', 'helpless', 'exhausted', "can't take it",
+        'cant take it', 'aar parchi na', 'kosto', 'mon kharap', 'suffering', 'hurting', 'pain',
+        'unhappy', 'miserable', 'grief', 'tabiyat kharab', 'bura lag raha', 'udas', 'pareshani',
+        // Devanagari keywords
+        'ब्रेकअप', 'ब्रेक अप', 'धोखा', 'छोड़ दिया', 'दिल टूट गया', 'दर्द', 'तकलीफ', 'परेशान',
+        'चिंता', 'रोना', 'रो रहा', 'रो रही', 'दुख', 'दुखी', 'अकेलापन', 'टूट गया', 'बीमार', 'बुरा लग रहा', 'उदास'
+      ];
+      // Fear & Anxiety markers (panic, nervous, threat of harm)
+      const fearKeywords = [
+        'fear', 'scared', 'darr', 'dar lag raha', 'panic', 'panicking', 'anxious', 'anxiety',
+        'nervous', 'frightened', 'dread', 'ghabrahat', 'bhoe', 'chinta', 'afraid', 'terrified',
+        'freaking out', 'trembling', 'shaking', 'nightmare', 'danger', 'khatra',
+        'डर', 'घबराहट', 'खतरा', 'डर लग रहा'
+      ];
+      // Anger, Hostility & Bad/Abusive Language markers
+      const angerWords = [
+        'angry', 'gussa', 'hate', 'furious', 'annoyed', 'frustrated', 'irritated', 'ridiculous',
+        'bakwas', 'shut up', 'idiot', 'stupid', 'bastard', 'fuck', 'shit', 'bitch', 'asshole',
+        'harami', 'kamina', 'kutta', 'chutiya', 'saala', 'sala', 'madarchod', 'behenchod', 'gaali',
+        'pagal', 'nonsense', 'worthless crap', 'rubbish', 'hell', 'gand mar', 'mar to aap',
+        'गांड', 'गुस्सा', 'बकवास', 'पागल', 'कुत्ता', 'हरामी', 'कमीना', 'चूतिया', 'साला', 'मादरचोद', 'बहनचोद', 'गाली'
+      ];
+      // Joy & Positivity markers
+      const joyKeywords = [
+        'happy', 'khush', 'great', 'awesome', 'excited', 'joy', 'wonderful', 'badiya', 
+        'achha', 'achha lag raha', 'theek ho gaya', 'sub theek', 'all good', 'much better',
+        'mazedar', 'proud', 'love', 'anondo', 'shandar', 'relaxed', 'grateful', 'peaceful',
+        'खुश', 'अच्छा', 'बढ़िया', 'मजेदार', 'शानदार', 'सब ठीक', 'बेहतर'
+      ];
+
+      // Scan current turn
+      let currentDespair = 0;
+      let currentDistress = 0;
+      let currentFear = 0;
+      let currentAnger = 0;
+      let currentJoy = 0;
+
+      despairKeywords.forEach(w => { if (lower.includes(w)) currentDespair++; });
+      distressKeywords.forEach(w => { if (lower.includes(w)) currentDistress++; });
+      fearKeywords.forEach(w => { if (lower.includes(w)) currentFear++; });
+      angerWords.forEach(w => { if (lower.includes(w)) currentAnger++; });
+      joyKeywords.forEach(w => { if (lower.includes(w)) currentJoy++; });
+
+      // Scan cumulative context across previous and current turns
+      let contextDespair = 0;
+      let contextDistress = 0;
+      let contextFear = 0;
+      let contextAnger = 0;
+      let contextJoy = 0;
+
+      despairKeywords.forEach(w => { if (fullContextLower.includes(w)) contextDespair++; });
+      distressKeywords.forEach(w => { if (fullContextLower.includes(w)) contextDistress++; });
+      fearKeywords.forEach(w => { if (fullContextLower.includes(w)) contextFear++; });
+      angerWords.forEach(w => { if (fullContextLower.includes(w)) contextAnger++; });
+      joyKeywords.forEach(w => { if (fullContextLower.includes(w)) contextJoy++; });
+
+      // 3. Page 2 Critical Clinical Safety Triggers (NHAA Triage Protocol)
+      // Suicide & Suicidal Ideation: Multilingual coverage (English, Hindi/Hinglish, Bengali, Devanagari)
+      const suicidePhrases = [
+        'suicid', 'kill myself', 'killing myself', 'want to die', 'wanna die', 'end my life',
+        'ending my life', 'take my life', 'better off dead', 'no reason to live', 'hang myself',
+        'hanging myself', 'slit my wrist', 'cut my wrist', 'overdose', 'jump off', 'end it all',
+        'wish i was dead', 'wished i was dead', "don't want to live", 'dont want to live',
+        'tired of living', 'i will die', 'ready to die',
+        // Hindi / Hinglish
+        'mar jana', 'marne ka man', 'marna chahta', 'marna chahti', 'marna hai', 'mar jau',
+        'mar jaunga', 'mar jaungi', 'jeena nahi chahta', 'jeena nahi chahti', 'jeena nahi hai',
+        'jaan de dunga', 'jaan de dungi', 'aatmhatya', 'atmahatya', 'khudkushi', 'khud kushi',
+        'apna jeevan samapt', 'zindagi khatam', 'chhat se kood', 'zeher kha', 'zehar kha',
+        'khud ko khatam',
+        // Devanagari Hindi Script
+        'सुसाइड', 'आत्महत्या', 'खुदकुशी', 'मर जाना', 'मरने का मन', 'मरना चाहता', 'मरना चाहती',
+        'मरना है', 'मर जाऊं', 'मर जाऊंगा', 'मर जाऊंगी', 'जीना नहीं चाहता', 'जीना नहीं चाहती',
+        'जीना नहीं है', 'जान दे दूंगा', 'जान दे दूंगी', 'जिंदगी खत्म', 'जहर खा', 'फांसी लगा',
+        // Bengali
+        'morte chai', 'more jabo', 'aar bachte chai na', 'aar baachte chai na', 'jeebon sesh',
+        'jeevan sesh kore debo', 'aattohotta', 'attohotta', 'morar ichha'
+      ];
+
+      // Self-Harm triggers
+      const selfHarmPhrases = [
+        'cut myself', 'cutting myself', 'hurt myself', 'hurting myself', 'harm myself', 'harming myself',
+        'burn myself', 'bleeding myself', 'khud ko chot', 'apne aap ko chot', 'apne ko chot',
+        'khud ko takleef', 'apne hath kaat', 'haath kaat',
+        'खुद को चोट', 'अपने आप को चोट', 'हाथ काट', 'नस काट'
+      ];
+
+      // Threat / Violence triggers
+      // Threat / Violence triggers
+      const threatPhrases = [
+        'kill you', 'destroy you', 'harm you', 'mar dunga', 'jaan se maar', 'goli maar',
+        'outside my house', 'attacking me', 'breaking into', 'chaku', 'knife', 'bandook', 'gun',
+        'police bula', 'dhamki de raha', 'threaten', 'rape', 'murder',
+        'मार दूंगा', 'जान से मार', 'गोली मार', 'धमकी'
+      ];
+
+      // Safety Recovery & Reassurance triggers (English, Hindi/Hinglish, Bengali, Devanagari)
+      const safetyRecoveryPhrases = [
+        'im safe', "i'm safe", 'i am safe', 'feeling better', 'feel better', 'feeling good',
+        'feel good', 'much better', 'all good', 'im ok', "i'm ok", 'i am ok', 'im okay', "i'm okay",
+        'i am okay', 'calm now', 'better now', 'out of danger', 'safe now', 'not suicidal',
+        'dont worry', "don't worry", 'no problem', 'i feel relaxed',
+        // Hindi / Hinglish
+        'achha feel', 'achha feel kar raha', 'achha feel ho raha', 'theek hu', 'mai theek hu',
+        'ab theek hu', 'sab theek hai', 'sab theek', 'theek lag raha', 'bach gaya', 'sukun mila',
+        'sukoon mila', 'tension nahi hai', 'dar nahi lag raha', 'shant hu', 'chinta mat karo',
+        'koi baat nahi', 'theek thaak hu',
+        // Devanagari Hindi Script
+        'अच्छा फील', 'अच्छा महसूस', 'मैं ठीक हूँ', 'मैं ठीक हू', 'अब ठीक हूँ', 'सब ठीक है', 'सब ठीक',
+        'सुरक्षित हूँ', 'सकून मिला', 'सुकून मिला', 'शांत हूँ', 'चिंता मत करो', 'चिंता मत कीजिए',
+        'बेहतर महसूस', 'डर नहीं लग रहा', 'अच्छा लग रहा',
+        // Bengali
+        'bhalo achi', 'ami safe', 'ar kosto nei', 'thik achi', 'shanto achi', 'bhalo lagche'
+      ];
+
+      const isSafetyConfirmed = safetyRecoveryPhrases.some(p => lower.includes(p));
+
+      // Trigger detection on current utterance or recent context
+      const isSuicideTriggered = suicidePhrases.some(p => lower.includes(p)) || 
+        (!isSafetyConfirmed && suicidePhrases.some(p => fullContextLower.includes(p)));
+      const isSelfHarmTriggered = selfHarmPhrases.some(p => lower.includes(p)) || 
+        (!isSafetyConfirmed && selfHarmPhrases.some(p => fullContextLower.includes(p)));
+      const isThreatTriggered = threatPhrases.some(p => lower.includes(p)) || 
+        (!isSafetyConfirmed && threatPhrases.some(p => fullContextLower.includes(p)));
+
+      if (isSafetyConfirmed) {
+        // Explicit reassurance & safety recovery: safely de-escalate crisis flags
+        this.sessionDetectedSafetyFlags.suicide = false;
+        this.sessionDetectedSafetyFlags.selfHarm = false;
+        this.sessionDetectedSafetyFlags.threat = false;
+        this.sessionDetectedSafetyFlags.severeDistress = false;
+        this.sessionDetectedSafetyFlags.deescalated = true;
+        this.sessionDetectedSafetyFlags.safetyConfirmed = true;
+      } else {
+        if (isSuicideTriggered) {
+          this.sessionDetectedSafetyFlags.suicide = true;
+          this.sessionDetectedSafetyFlags.deescalated = false;
+        }
+        if (isSelfHarmTriggered) {
+          this.sessionDetectedSafetyFlags.selfHarm = true;
+          this.sessionDetectedSafetyFlags.deescalated = false;
+        }
+        if (isThreatTriggered) {
+          this.sessionDetectedSafetyFlags.threat = true;
+          this.sessionDetectedSafetyFlags.deescalated = false;
+        }
+      }
+
+      // 4. Multi-turn Context-Aware Semantic Emotional & Risk Calculation
+      let targetDistress = 12;
+      let targetFear = 6;
+      let targetMood = 'Calm';
+      let targetMoodColor = '#10b981';
+
+      if (isSafetyConfirmed) {
+        // User confirmed safety: set calm/grounded recovery values
+        targetDistress = 14;
+        targetFear = 6;
+        targetMood = 'Calm';
+        targetMoodColor = '#10b981';
+      } else if (this.sessionDetectedSafetyFlags.suicide || this.sessionDetectedSafetyFlags.selfHarm) {
+        targetDistress = 96;
+        targetFear = 85;
+        targetMood = 'Distress';
+        targetMoodColor = '#f47aa9';
+      } else if (this.sessionDetectedSafetyFlags.threat) {
+        targetDistress = 85;
+        targetFear = 90;
+        targetMood = 'Fear';
+        targetMoodColor = '#fb923c';
+      } else if (currentDespair > 0 || (!this.sessionDetectedSafetyFlags.deescalated && contextDespair > 0)) {
+        const dMatches = Math.max(currentDespair, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextDespair);
+        targetDistress = Math.min(92, 72 + dMatches * 8);
+        targetFear = Math.min(80, 48 + Math.max(currentFear, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextFear) * 10);
+        targetMood = 'Distress';
+        targetMoodColor = '#f47aa9';
+      } else if (currentDistress > 1 || (!this.sessionDetectedSafetyFlags.deescalated && (contextDistress > 1 || fullContextLower.includes('breakup') || fullContextLower.includes('ब्रेकअप') || fullContextLower.includes('depressed')))) {
+        const count = Math.max(currentDistress, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextDistress);
+        targetDistress = Math.min(88, 62 + count * 8);
+        targetFear = Math.min(75, 36 + Math.max(currentFear, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextFear) * 10);
+        targetMood = 'Distress';
+        targetMoodColor = '#f47aa9';
+      } else if (currentAnger > 0 || (!this.sessionDetectedSafetyFlags.deescalated && contextAnger > 0)) {
+        targetDistress = Math.min(85, 60 + Math.max(currentAnger, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextAnger) * 8);
+        targetFear = 28;
+        targetMood = 'Anger';
+        targetMoodColor = '#f87171';
+      } else if (currentFear > 0 || (!this.sessionDetectedSafetyFlags.deescalated && contextFear > 0)) {
+        targetDistress = 48 + Math.max(currentDistress, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextDistress) * 8;
+        targetFear = Math.min(85, 55 + Math.max(currentFear, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextFear) * 12);
+        targetMood = 'Fear';
+        targetMoodColor = '#fb923c';
+      } else if (currentDistress > 0 || (!this.sessionDetectedSafetyFlags.deescalated && contextDistress > 0)) {
+        targetDistress = Math.min(72, 48 + Math.max(currentDistress, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextDistress) * 8);
+        targetFear = 20 + Math.max(currentFear, this.sessionDetectedSafetyFlags.deescalated ? 0 : contextFear) * 6;
+        targetMood = 'Distress';
+        targetMoodColor = '#fbbf24';
+      } else if (currentJoy > 0 && contextDistress === 0 && contextDespair === 0) {
+        targetDistress = 6;
+        targetFear = 4;
+        targetMood = 'Calm';
+        targetMoodColor = '#34d399';
+      } else {
+        targetDistress = 15;
+        targetFear = 8;
+        targetMood = 'Calm';
+        targetMoodColor = '#10b981';
+      }
+
+      // 5. Psychological Retention & Cumulative Multi-Turn Context Floor
+      if (isSafetyConfirmed) {
+        // Fast de-escalation towards target recovery values
+        this.currentDistressPct = Math.round(this.currentDistressPct * 0.20 + targetDistress * 0.80);
+        this.currentFearPct = Math.round(this.currentFearPct * 0.20 + targetFear * 0.80);
+        this.smoothedSvi = Math.min(this.smoothedSvi, 24);
+      } else if (this.sessionDetectedSafetyFlags.suicide || this.sessionDetectedSafetyFlags.selfHarm) {
+        this.currentDistressPct = Math.max(this.currentDistressPct, targetDistress);
+        this.currentFearPct = Math.max(this.currentFearPct, targetFear);
+      } else if (!this.sessionDetectedSafetyFlags.deescalated && (contextDespair > 0 || contextDistress > 0 || contextAnger > 0)) {
+        let contextFloor = 48;
+        if (contextDespair > 0) contextFloor = 65;
+        else if (contextDistress > 1 || fullContextLower.includes('breakup') || fullContextLower.includes('ब्रेकअप')) contextFloor = 56;
+        else if (contextAnger > 0) contextFloor = 52;
+
+        const boundedTarget = Math.max(contextFloor, targetDistress);
+        this.currentDistressPct = Math.round(this.currentDistressPct * 0.40 + boundedTarget * 0.60);
+        this.currentFearPct = Math.round(this.currentFearPct * 0.40 + targetFear * 0.60);
+        
+        if (this.currentDistressPct >= 42) {
+          if (contextAnger > 0 && currentAnger > 0) {
+            targetMood = 'Anger';
+            targetMoodColor = '#f87171';
+          } else {
+            targetMood = 'Distress';
+            targetMoodColor = '#f47aa9';
+          }
+        }
+      } else {
+        this.currentDistressPct = Math.round(this.currentDistressPct * 0.35 + targetDistress * 0.65);
+        this.currentFearPct = Math.round(this.currentFearPct * 0.35 + targetFear * 0.65);
+      }
+      this.currentEmotion = targetMood;
+      this.currentEmotionColor = targetMoodColor;
+
+      // Track words spoken for acoustic rate estimation
+      const wordCount = text.split(/\s+/).filter(Boolean).length;
+      this.audioFeatureTracker.wordsSpoken += wordCount;
+
+      this.recalculateLiveTelemetry();
+    }
+
+    // =========================================================
+    // MULTI-SIGNAL SVI CALCULATION & TEMPORAL SMOOTHING ENGINE
+    // =========================================================
+    recalculateLiveTelemetry() {
+      const tracker = this.audioFeatureTracker;
+      const acousticDistress = tracker.smoothedAcousticDistress || 12;
+
+      // Multi-signal weighted formula:
+      // Semantic Distress: 45%
+      // Semantic Fear & Safety: 30%
+      // Observable Acoustic Dynamics: 25%
+      let rawSVI = (this.currentDistressPct * 0.45) + 
+                   (this.currentFearPct * 0.30) + 
+                   (acousticDistress * 0.25);
+
+      // Multi-turn context floor for SVI:
+      const hasCriticalTrigger = this.sessionDetectedSafetyFlags.suicide || this.sessionDetectedSafetyFlags.selfHarm;
+      if (this.sessionDetectedSafetyFlags.suicide) {
+        rawSVI = Math.max(rawSVI, 95);
+      } else if (this.sessionDetectedSafetyFlags.selfHarm) {
+        rawSVI = Math.max(rawSVI, 90);
+      } else if (this.sessionDetectedSafetyFlags.threat) {
+        rawSVI = Math.max(rawSVI, 85);
+      } else if (!this.sessionDetectedSafetyFlags.deescalated && this.currentDistressPct >= 55) {
+        rawSVI = Math.max(rawSVI, 46); // Minimum Moderate band floor
+      } else if (!this.sessionDetectedSafetyFlags.deescalated && this.currentDistressPct >= 42) {
+        rawSVI = Math.max(rawSVI, 38); // Minimum Elevated Low floor
+      } else if (this.currentEmotion === 'Anger') {
+        rawSVI = Math.max(rawSVI, 52); // Elevate bad/aggressive language to Moderate band
+      }
+
+      // Clamp strictly within 1 - 100
+      rawSVI = Math.max(1, Math.min(100, Math.round(rawSVI)));
+
+      // Temporal Exponential Moving Average (EMA) Smoothing
+      this.lastSvi = this.currentSvi;
+      if (this.sessionDetectedSafetyFlags.deescalated && rawSVI < this.smoothedSvi) {
+        // Fast responsive downward tracking when user affirms safety
+        this.smoothedSvi = (this.smoothedSvi * 0.25) + (rawSVI * 0.75);
+      } else if (hasCriticalTrigger || rawSVI >= 85) {
+        this.smoothedSvi = Math.max(this.smoothedSvi, rawSVI);
+      } else if (rawSVI > this.smoothedSvi + 15) {
+        this.smoothedSvi = (this.smoothedSvi * 0.40) + (rawSVI * 0.60);
+      } else if (rawSVI < this.smoothedSvi) {
+        this.smoothedSvi = (this.smoothedSvi * 0.90) + (rawSVI * 0.10);
+      } else {
+        this.smoothedSvi = (this.smoothedSvi * 0.78) + (rawSVI * 0.22);
+      }
+      this.currentSvi = Math.max(1, Math.min(100, Math.round(this.smoothedSvi)));
+
+      // Add to rolling history for trend calculation (keeps last 15 samples)
+      const now = performance.now();
+      this.sviHistory.push({ svi: this.currentSvi, time: now });
+      if (this.sviHistory.length > 15) this.sviHistory.shift();
+
+      // Determine Trend (Increasing, Decreasing, Stable) from rolling 3-second window
+      const threeSecAgo = now - 3200;
+      const pastSamples = this.sviHistory.filter(s => s.time >= threeSecAgo);
+      let trendState = 'Stable';
+      let trendArrow = '→';
+
+      if (pastSamples.length >= 2) {
+        const oldest = pastSamples[0].svi;
+        const delta = this.currentSvi - oldest;
+        if (delta >= 3) {
+          trendState = 'Increasing';
+          trendArrow = '↑';
+        } else if (delta <= -3) {
+          trendState = 'Decreasing';
+          trendArrow = '↓';
+        } else {
+          trendState = 'Stable';
+          trendArrow = '→';
+        }
+      }
+
+      // Check for Severe Distress
+      if (this.currentSvi >= 61 || this.currentDistressPct >= 65) {
+        this.sessionDetectedSafetyFlags.severeDistress = true;
+      }
+
+      // Render updated telemetry to the UI
+      this.renderTelemetryUI(trendState, trendArrow);
+    }
+
+    // =========================================================
+    // RENDER TELEMETRY UI (Page 1 & Page 2)
+    // =========================================================
+    renderTelemetryUI(trendState, trendArrow) {
+      // 1. SVI Score Number Display (1 - 100)
+      if (this.vdSviNum) {
+        this.vdSviNum.textContent = this.currentSvi;
+      }
+
+      // 2. SVI Severity Band with Hysteresis (1-20 Very Low, 21-40 Low, 41-60 Moderate, 61-80 High, 81-100 Critical)
+      let severityClass = 'low';
+      let severityLabel = 'LOW';
+      let sviColor = '#10b981';
+
+      if (this.currentSvi <= 20) {
+        severityClass = 'very-low';
+        severityLabel = 'VERY LOW';
+        sviColor = '#10b981';
+      } else if (this.currentSvi <= 40) {
+        severityClass = 'low';
+        severityLabel = 'LOW';
+        sviColor = '#10b981';
+      } else if (this.currentSvi <= 60) {
+        severityClass = 'moderate';
+        severityLabel = 'MODERATE';
+        sviColor = '#fbbf24';
+      } else if (this.currentSvi <= 80) {
+        severityClass = 'high';
+        severityLabel = 'HIGH';
+        sviColor = '#f87171';
+      } else {
+        severityClass = 'critical';
+        severityLabel = 'CRITICAL';
+        sviColor = '#fb7185';
+      }
+
+      if (this.vdSeverityBadge && this.vdBadgeText) {
+        this.vdSeverityBadge.className = `vd-severity-pill ${severityClass}`;
+        this.vdBadgeText.textContent = severityLabel;
+      }
+      if (this.vdSviNum) {
+        this.vdSviNum.style.color = sviColor;
+      }
+
+      // Synchronize Data Button Dynamic Light & Live Analysis Status Dot
+      if (this.vdToggleDot) {
+        this.vdToggleDot.style.background = sviColor;
+        this.vdToggleDot.style.boxShadow = `0 0 10px ${sviColor}, 0 0 4px ${sviColor}`;
+      }
+      if (this.vdLiveDot) {
+        this.vdLiveDot.style.background = sviColor;
+        this.vdLiveDot.style.boxShadow = `0 0 10px ${sviColor}`;
+      }
+
+      // 3. Trend Indicator Tag (Increasing, Decreasing, Stable)
+      if (this.vdTrendArrow && this.vdTrendText) {
+        const parentTag = this.vdTrendArrow.parentElement;
+        if (parentTag) {
+          parentTag.className = 'vd-trend-tag';
+          if (trendState === 'Increasing') parentTag.classList.add('increasing');
+          else if (trendState === 'Stable') parentTag.classList.add('stable');
+        }
+        this.vdTrendArrow.textContent = trendArrow;
+        this.vdTrendText.textContent = trendState;
+      }
+
+      // 4. Mood, Distress %, Fear %, Language
+      if (this.vdMoodText) this.vdMoodText.textContent = this.currentEmotion;
+      if (this.vdMoodDot && this.currentEmotionColor) this.vdMoodDot.style.background = this.currentEmotionColor;
+      if (this.vdDistressVal) this.vdDistressVal.textContent = `${this.currentDistressPct}%`;
+      if (this.vdFearVal) this.vdFearVal.textContent = `${this.currentFearPct}%`;
+      if (this.vdLangVal) this.vdLangVal.textContent = this.detectedLanguageName;
+
+      // 5. Page 2: Key Indicators (NHAA Clinical Triage Protocol)
+      const flags = this.sessionDetectedSafetyFlags;
+      if (this.vdIndSuicide) {
+        if (flags.suicide) {
+          this.vdIndSuicide.className = 'vd-indicator-badge danger';
+          this.vdIndSuicide.textContent = 'DETECTED';
+        } else if (flags.deescalated && flags.safetyConfirmed) {
+          this.vdIndSuicide.className = 'vd-indicator-badge deescalated';
+          this.vdIndSuicide.textContent = 'De-escalated / Safe';
+        } else {
+          this.vdIndSuicide.className = 'vd-indicator-badge safe';
+          this.vdIndSuicide.textContent = 'Not Detected';
+        }
+      }
+      if (this.vdIndSelfHarm) {
+        if (flags.selfHarm) {
+          this.vdIndSelfHarm.className = 'vd-indicator-badge danger';
+          this.vdIndSelfHarm.textContent = 'DETECTED';
+        } else if (flags.deescalated && flags.safetyConfirmed) {
+          this.vdIndSelfHarm.className = 'vd-indicator-badge deescalated';
+          this.vdIndSelfHarm.textContent = 'De-escalated / Safe';
+        } else {
+          this.vdIndSelfHarm.className = 'vd-indicator-badge safe';
+          this.vdIndSelfHarm.textContent = 'Not Detected';
+        }
+      }
+      if (this.vdIndThreat) {
+        if (flags.threat) {
+          this.vdIndThreat.className = 'vd-indicator-badge danger';
+          this.vdIndThreat.textContent = 'DETECTED';
+        } else if (flags.deescalated && flags.safetyConfirmed) {
+          this.vdIndThreat.className = 'vd-indicator-badge deescalated';
+          this.vdIndThreat.textContent = 'De-escalated / Safe';
+        } else {
+          this.vdIndThreat.className = 'vd-indicator-badge safe';
+          this.vdIndThreat.textContent = 'Not Detected';
+        }
+      }
+      if (this.vdIndDistress) {
+        const isSevere = flags.severeDistress || this.currentSvi >= 61;
+        if (isSevere) {
+          this.vdIndDistress.className = 'vd-indicator-badge danger';
+          this.vdIndDistress.textContent = 'ELEVATED';
+        } else if (flags.deescalated && flags.safetyConfirmed) {
+          this.vdIndDistress.className = 'vd-indicator-badge deescalated';
+          this.vdIndDistress.textContent = 'Stabilized / Safe';
+        } else {
+          this.vdIndDistress.className = 'vd-indicator-badge safe';
+          this.vdIndDistress.textContent = 'Not Detected';
+        }
+      }
+
+      // 6. Page 2: Recommended Support Section
+      if (this.vdSupportList) {
+        if (flags.suicide || flags.selfHarm) {
+          this.vdSupportList.innerHTML = `
+            <div class="vd-support-bullet" style="color:#f87171;font-weight:700;">Immediate crisis safety protocol recommended</div>
+            <div class="vd-support-bullet">Connect with certified 24x7 emergency helpline</div>
+            <div class="vd-support-bullet">Provide grounding and safety reassurance</div>
+          `;
+        } else if (flags.threat) {
+          this.vdSupportList.innerHTML = `
+            <div class="vd-support-bullet" style="color:#fb923c;font-weight:700;">Active safety alert: ensure caller is in a secure location</div>
+            <div class="vd-support-bullet">Provide emergency contact information and crisis escalation</div>
+            <div class="vd-support-bullet">Maintain supportive, reassuring communication</div>
+          `;
+        } else if (this.currentSvi >= 61 || flags.severeDistress) {
+          this.vdSupportList.innerHTML = `
+            <div class="vd-support-bullet">Active compassionate de-escalation</div>
+            <div class="vd-support-bullet">Encourage deep calming breaths & grounding</div>
+            <div class="vd-support-bullet">Provide emotional validation without rush</div>
+          `;
+        } else if (this.currentSvi >= 41) {
+          this.vdSupportList.innerHTML = `
+            <div class="vd-support-bullet">Empathetic listening and validation</div>
+            <div class="vd-support-bullet">Explore manageable steps to address concerns</div>
+            <div class="vd-support-bullet">Provide calming conversational presence</div>
+          `;
+        } else {
+          this.vdSupportList.innerHTML = `
+            <div class="vd-support-bullet">Continue conversation</div>
+            <div class="vd-support-bullet">Provide emotional support and guidance</div>
+          `;
         }
       }
     }
