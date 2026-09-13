@@ -609,10 +609,13 @@
               this.isLiveApiMode = false;
               console.log('[VoiceAssistant] Session established. Mode: High-Speed Streaming STT/TTS');
               
+              // Immediately start speech recognition pipeline right away!
+              this._initFallbackSpeechRecognition();
+              this._setState(VoiceState.LISTENING);
+
               const currentHistory = config.history || [];
               if (!this._hasSpokenIntro && currentHistory.length === 0) {
                 this._hasSpokenIntro = true;
-                this._setState(VoiceState.AI_SPEAKING);
                 
                 let introGreeting = "नमस्ते! मैं SUNO AI हूँ। मुझे सुदीप्ता ने आपके भावनात्मक सहयोग और बातचीत के लिए ट्रेन किया है। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?";
                 if (this.selectedLang === 'en-US') {
@@ -623,11 +626,7 @@
                 this._lastAssistantSpokenText = introGreeting;
                 this._emitTranscript('assistant', introGreeting, true);
                 
-                // Play intro greeting FIRST. Speech recognition will ONLY initialize after intro speech concludes!
                 this._enqueueFallbackTTSChunk(introGreeting);
-              } else {
-                this._initFallbackSpeechRecognition();
-                this._setState(VoiceState.LISTENING);
               }
               break;
 
@@ -1234,7 +1233,7 @@
         console.log(`[VoiceAssistant TTS] Device has no native ${ttsLang} voice. Streaming via backend proxy.`);
         try {
           const encoded = encodeURIComponent(text.substring(0, 300));
-          const speedArg = targetRate ? `&speed=${targetRate}` : '';
+          const speedArg = '&speed=0.95';
           const audioUrl = `/api/tts?lang=${ttsLang}&text=${encoded}${speedArg}`;
           this._initAudioOutput();
           const audio = new Audio(audioUrl);
