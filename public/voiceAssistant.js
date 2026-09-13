@@ -560,7 +560,6 @@
       if (config.language) {
         this.selectedLang = config.language !== 'auto' ? config.language : (navigator.language || 'en-US');
       }
-      this.selectedPersona = config.persona || this.selectedPersona || 'aura';
 
       // Synchronously create/resume AudioContexts on direct user gesture
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -914,15 +913,6 @@
       }
     }
 
-    setVoicePersona(personaName) {
-      this.selectedPersona = personaName || 'aura';
-      console.log('[VoiceAssistant] Voice persona set to:', this.selectedPersona);
-      // Cancel any ongoing playback to immediately apply new voice personality
-      if (window.speechSynthesis && this.isFallbackPlaying) {
-        try { window.speechSynthesis.cancel(); } catch (_) {}
-      }
-    }
-
     // ==========================================
     // VISUAL FEEDBACK & ANALYSER INTEGRATION
     // ==========================================
@@ -1227,35 +1217,9 @@
       } catch (e) {}
 
       const utterance = new SpeechSynthesisUtterance(text);
-      const persona = this.selectedPersona || 'aura';
-      let targetRate = 0.95;
-      let targetPitch = 1.08;
-
-      if (persona === 'kabir') {
-        // Calm Deep Male Voice
-        targetPitch = 0.82;
-        targetRate = 0.92;
-      } else if (persona === 'rohan') {
-        // Energetic Friendly Male Voice
-        targetPitch = 0.95;
-        targetRate = 1.05;
-      } else if (persona === 'priya') {
-        // Warm Natural Female Voice
-        targetPitch = 1.15;
-        targetRate = 0.96;
-      } else if (persona === 'aetheria') {
-        // Soft Whispering / Soothing Ambient Voice
-        targetPitch = 1.04;
-        targetRate = 0.88;
-      } else {
-        // Aura (Default gentle female)
-        targetPitch = 1.08;
-        targetRate = 0.95;
-      }
-
-      utterance.rate = targetRate; 
+      utterance.rate = 0.95; 
       utterance.volume = 1.0;
-      utterance.pitch = targetPitch;
+      utterance.pitch = 1.08; // Consistent gentle female pitch
 
       // Auto-detect language strictly: Bengali (বাংলা), Hindi (हिन्दी), or English
       const isBengaliText = /[\u0980-\u09FF]/.test(text) || /\b(tumi|tomar|kemon|achen|korecho|banalo|kothay|shuncho|aajke|ekhon|bhalo|apni|apnar)\b/i.test(text);
@@ -1272,50 +1236,30 @@
 
       utterance.lang = targetLang;
 
-      // Select voice based on Persona (Male vs Female) and Language
-      const isMalePersona = (persona === 'kabir' || persona === 'rohan');
+      // Select consistent voice
       let matchedVoice = null;
       try {
         const voices = window.speechSynthesis.getVoices() || [];
         if (voices.length > 0) {
           if (targetLang.startsWith('bn') || isBengaliText) {
-            if (isMalePersona) {
-              matchedVoice = 
-                voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('bn')) && /tapan|bashkar|male|boy|man/i.test(v.name))
-                || voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('bn')) && !/female|girl/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('bn'));
-            } else {
-              matchedVoice = 
-                voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('bn')) && /female|mithu|shohor|girl|natural/i.test(v.name))
-                || voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('bn')) && !/male/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('bn'));
-            }
+            matchedVoice = 
+              voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('bn')) && /female|mithu|tapan|bashkar|shohor|girl|natural/i.test(v.name))
+              || voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('bn')) && !/male/i.test(v.name))
+              || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('bn'))
+              || voices.find(v => /bengali|bangla/i.test(v.name));
           } else if (targetLang.startsWith('hi') || isHindiText) {
-            if (isMalePersona) {
-              matchedVoice = 
-                voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('hi')) && /hemant|madhur|guy|male|david|ravi/i.test(v.name))
-                || voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('hi')) && !/female|kalpana|swara|heera|ananya|priya|neerja/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('hi'));
-            } else {
-              matchedVoice = 
-                voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('hi')) && /google.*(female|हिंदी|हिन्दी)|kalpana|swara|heera|ananya|priya|neerja|female/i.test(v.name))
-                || voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('hi')) && !/male|hemant|madhur|guy|david/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('hi'));
-            }
+            matchedVoice = 
+              voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('hi')) && /google.*(female|हिंदी|हिन्दी)|kalpana|swara|heera|ananya|priya|neerja|female/i.test(v.name))
+              || voices.find(v => (v.lang && v.lang.toLowerCase().startsWith('hi')) && !/male|hemant|madhur|guy|david/i.test(v.name))
+              || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('hi'))
+              || voices.find(v => /hindi|kalpana|swara/i.test(v.name));
           } else {
-            if (isMalePersona) {
-              matchedVoice = 
-                voices.find(v => v.lang && v.lang.startsWith('en') && /(david|george|mark|guy|ryan|richard|james|ravi|daniel|arthur|oliver)/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.startsWith('en') && /male/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.startsWith('en') && !/female|zira|samantha|aria|jenny/i.test(v.name));
-            } else {
-              matchedVoice = 
-                voices.find(v => v.lang && v.lang.startsWith('en') && /(aria|jenny|ava|emma|sonia|michelle|ana|clara|libby|maia|natasha|neerja)/i.test(v.name) && !/male|david|george|mark|guy|ryan/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.startsWith('en') && /(samantha|victoria|karen|susan|kathy|serena|stephanie|moira|fiona|tessa|veena)/i.test(v.name) && !/male|david|george|mark/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.startsWith('en') && /female|natural/i.test(v.name) && !/male|david|george|mark|guy/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.startsWith('en') && /zira|google/i.test(v.name) && !/male|david|george|mark|guy|ryan/i.test(v.name))
-                || voices.find(v => v.lang && v.lang.startsWith('en') && !/male|david|george|mark|guy|ryan|richard|james|ravi/i.test(v.name));
-            }
+            matchedVoice = 
+              voices.find(v => v.lang && v.lang.startsWith('en') && /(aria|jenny|ava|emma|sonia|michelle|ana|clara|libby|maia|natasha|neerja)/i.test(v.name) && !/male|david|george|mark|guy|ryan/i.test(v.name))
+              || voices.find(v => v.lang && v.lang.startsWith('en') && /(samantha|victoria|karen|susan|kathy|serena|stephanie|moira|fiona|tessa|veena)/i.test(v.name) && !/male|david|george|mark/i.test(v.name))
+              || voices.find(v => v.lang && v.lang.startsWith('en') && /female|natural/i.test(v.name) && !/male|david|george|mark|guy/i.test(v.name))
+              || voices.find(v => v.lang && v.lang.startsWith('en') && /zira|google/i.test(v.name) && !/male|david|george|mark|guy|ryan/i.test(v.name))
+              || voices.find(v => v.lang && v.lang.startsWith('en') && !/male|david|george|mark|guy|ryan|richard|james|ravi/i.test(v.name));
           }
 
           if (matchedVoice) {

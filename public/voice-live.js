@@ -28,7 +28,6 @@
       this.transcriptUser = document.getElementById('liveTranscriptUser');
       this.transcriptAi = document.getElementById('liveTranscriptAi');
       this.langSelect = document.getElementById('liveVoiceLangSelect');
-      this.voicePersonaSelect = document.getElementById('liveVoicePersonaSelect');
       this.micDeviceSelect = document.getElementById('liveMicDeviceSelect');
       this.micMeter = document.getElementById('liveMicMeter');
       this.dockTypeContainer = document.getElementById('dockTypeContainer');
@@ -208,20 +207,6 @@
     }
 
     initEvents() {
-      // Restore saved voice persona
-      const savedPersona = localStorage.getItem('suno_voice_persona') || 'aura';
-      if (this.voicePersonaSelect) {
-        this.voicePersonaSelect.value = savedPersona;
-        this.voicePersonaSelect.addEventListener('change', () => {
-          const newPersona = this.voicePersonaSelect.value || 'aura';
-          localStorage.setItem('suno_voice_persona', newPersona);
-          console.log('[Live Voice UI] Voice persona changed to:', newPersona);
-          if (this.voiceAssistant) {
-            this.voiceAssistant.setVoicePersona(newPersona);
-          }
-        });
-      }
-
       if (this.langSelect) {
         this.langSelect.addEventListener('change', () => {
           this.updateRecognitionLanguage();
@@ -881,11 +866,9 @@
       // Connect Modular Voice Assistant Service
       if (this.voiceAssistant) {
         const selectedLang = this.langSelect ? this.langSelect.value : 'auto';
-        const selectedPersona = this.voicePersonaSelect ? this.voicePersonaSelect.value : (localStorage.getItem('suno_voice_persona') || 'aura');
         this.voiceAssistant.connect({
           deviceId: this.selectedDeviceId,
           language: selectedLang,
-          persona: selectedPersona,
           history: currentChat,
           provider: savedSettings.provider || 'gemini',
           apiKey: savedSettings.apiKey || ''
