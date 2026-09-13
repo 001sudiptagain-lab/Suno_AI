@@ -991,18 +991,6 @@
       this.fallbackSpeechRecognition.onresult = (event) => {
         if (this.isMuted) return;
 
-        // 1. Never transcribe while assistant is playing speech
-        if (this.isFallbackPlaying || this.state === VoiceState.AI_SPEAKING || this.currentAudioElement || this.currentUtterance) {
-          console.log('[VoiceAssistant STT] Discarded speech recognition during active assistant audio.');
-          return;
-        }
-
-        // 2. Cooldown window (700ms) after speech ends to prevent acoustic speaker echo from entering microphone
-        if (this._lastTtsEndTime && (Date.now() - this._lastTtsEndTime < 700)) {
-          console.log('[VoiceAssistant STT] Discarded residual speaker echo during cooldown window.');
-          return;
-        }
-
         let interim = '';
         let finalStr = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -1018,7 +1006,15 @@
 
         const heard = (finalStr || interim).trim();
         if (heard) {
-          // 3. Exact self-echo filter: if microphone heard the assistant's own intro or response text, discard it
+          console.log(`[VoiceAssistant STT Heard]: "${heard}" (isFinal=${Boolean(finalStr)})`);
+
+          // 1. Never transcribe while assistant is playing speech
+          if (this.isFallbackPlaying || this.state === VoiceState.AI_SPEAKING || this.currentAudioElement || this.currentUtterance) {
+            console.log('[VoiceAssistant STT] Discarded speech recognition during active assistant audio.');
+            return;
+          }
+
+          // 2. Exact self-echo filter: if microphone heard the assistant's own intro or response text, discard it
           if (this._lastAssistantSpokenText) {
             const cleanHeard = heard.toLowerCase().replace(/[^\w\u0900-\u09FF\u0980-\u09FF]/g, '');
             const cleanLast = this._lastAssistantSpokenText.toLowerCase().replace(/[^\w\u0900-\u09FF\u0980-\u09FF]/g, '');
@@ -1037,7 +1033,6 @@
               this.interimDebounceTimer = null;
             }
             console.log('[VoiceAssistant STT] Final recognized user speech:', finalStr.trim());
-            // Immediately stop STT before sending to prevent mic overlap
             try { this.fallbackSpeechRecognition.stop(); } catch (e) {}
             this.send(finalStr.trim());
           } else if (interim.trim()) {
@@ -1049,7 +1044,7 @@
                 try { this.fallbackSpeechRecognition.stop(); } catch (e) {}
                 this.send(currentInterim);
               }
-            }, 850);
+            }, 600);
           }
         }
       };
