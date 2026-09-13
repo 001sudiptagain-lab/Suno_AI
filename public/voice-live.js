@@ -416,8 +416,18 @@
           this.micDeviceSelect.appendChild(defaultOpt);
 
           // 2. Add enumerated audio devices
-          let bestDeviceId = 'default';
-          let physicalFound = false;
+          let bestDeviceId = null;
+
+          // First identify if there is a real physical microphone (Intel, Realtek, Array, etc.)
+          const physicalMics = audioInputs.filter(device => {
+            const label = device.label || '';
+            const isVirtual = /steam|virtual|cable|voicemeeter|default|communications/i.test(label);
+            return !isVirtual && device.deviceId && device.deviceId !== 'default';
+          });
+
+          if (physicalMics.length > 0) {
+            bestDeviceId = physicalMics[0].deviceId;
+          }
 
           audioInputs.forEach((device, idx) => {
             if (device.deviceId === 'default') return; // Handled above
@@ -427,20 +437,13 @@
             const label = device.label || `Microphone ${idx + 1}`;
             opt.textContent = `🎙️ ${label}`;
             this.micDeviceSelect.appendChild(opt);
-
-            // Detect if this is a physical / external mic (not Steam or Virtual Audio)
-            const isVirtual = /steam|virtual|cable|voicemeeter/i.test(label);
-            if (!isVirtual && !physicalFound) {
-              bestDeviceId = device.deviceId;
-              physicalFound = true;
-            }
           });
 
-          // Retain the user's explicit selection if it exists in the list
-          if (currentVal && Array.from(this.micDeviceSelect.options).some(o => o.value === currentVal)) {
+          // Retain user's explicit selection if valid, otherwise prioritize physical mic
+          if (currentVal && currentVal !== 'default' && Array.from(this.micDeviceSelect.options).some(o => o.value === currentVal)) {
             this.micDeviceSelect.value = currentVal;
             this.selectedDeviceId = currentVal;
-          } else if (physicalFound) {
+          } else if (bestDeviceId) {
             this.micDeviceSelect.value = bestDeviceId;
             this.selectedDeviceId = bestDeviceId;
             console.log(`[Mic] Prioritized physical microphone: ${bestDeviceId}`);
