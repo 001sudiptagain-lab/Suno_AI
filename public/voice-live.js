@@ -202,7 +202,11 @@
       }
       if (this.micDeviceSelect) {
         this.micDeviceSelect.addEventListener('change', async () => {
-          this.selectedDeviceId = this.micDeviceSelect.value;
+          const newDeviceId = this.micDeviceSelect.value;
+          if (newDeviceId === this.selectedDeviceId && this.voiceAssistant && this.voiceAssistant.mediaStream) {
+            return; // Don't abort/switch if already connected to this device
+          }
+          this.selectedDeviceId = newDeviceId;
           console.log(`[Live Voice UI] Selected microphone changed to: ${this.selectedDeviceId}`);
           if (this.voiceAssistant && this.screen && this.screen.classList.contains('active')) {
             const currentLabel = this.micDeviceSelect.options[this.micDeviceSelect.selectedIndex]?.text?.replace(/^[🎙️\s]+/, '') || 'Microphone';

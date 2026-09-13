@@ -327,6 +327,13 @@
       const rms = Math.sqrt(sum / floatData.length);
       this.currentRMS = rms * 100; // Scaled 0 - 100
 
+      // Periodically log live microphone hardware level (every 1.5 seconds)
+      const now = Date.now();
+      if (!this._lastMeterLogTime || now - this._lastMeterLogTime > 1500) {
+        this._lastMeterLogTime = now;
+        console.log(`[Mic Hardware Signal Level]: ${(rms * 100).toFixed(2)}% | Track: ${this.selectedDeviceLabel} (readyState=${this.mediaStream ? this.mediaStream.getAudioTracks()[0]?.readyState : 'none'})`);
+      }
+
       // Track if we ever received a non-zero audio signal (> 0.003)
       if (rms > 0.005) {
         this._hasHeardNonZeroSignal = true;
