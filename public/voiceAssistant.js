@@ -174,17 +174,19 @@
         if (deviceId && deviceId !== 'default') {
           try {
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
-              audio: { deviceId: { exact: deviceId } }
+              audio: Object.assign({}, baseAudioConstraints, { deviceId: { exact: deviceId } })
             });
           } catch (deviceConstraintErr) {
-            console.warn('[Mic] Exact device constraint failed, falling back to default mic:', deviceConstraintErr);
+            console.warn('[Mic] Exact device constraint failed, falling back with general constraints:', deviceConstraintErr);
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
-              audio: true
+              audio: Object.assign({}, baseAudioConstraints, { deviceId: { ideal: deviceId } })
+            }).catch(async () => {
+              return await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints });
             });
           }
         } else {
           this.mediaStream = await navigator.mediaDevices.getUserMedia({
-            audio: true
+            audio: baseAudioConstraints
           });
         }
 
@@ -194,10 +196,16 @@
         this.selectedDeviceId = deviceId || 'default';
 
         this.inputSource = this.audioContext.createMediaStreamSource(this.mediaStream);
+
+        // Pre-amp gain boost for laptop/built-in digital mic arrays with low hardware volume
+        this.inputPreGain = this.audioContext.createGain();
+        this.inputPreGain.gain.value = 2.8; // 2.8x linear boost for clear speech recognition & VAD
+        this.inputSource.connect(this.inputPreGain);
+
         this.inputAnalyser = this.audioContext.createAnalyser();
         this.inputAnalyser.fftSize = 128;
         this.inputAnalyser.smoothingTimeConstant = 0.3;
-        this.inputSource.connect(this.inputAnalyser);
+        this.inputPreGain.connect(this.inputAnalyser);
 
         // Continuous PCM Streaming via ScriptProcessorNode / AudioWorklet
         const bufferSize = 2048;
@@ -209,13 +217,19 @@
           const inputBuffer = audioProcessingEvent.inputBuffer;
           const inputData = inputBuffer.getChannelData(0);
 
+          // Apply slight digital boost to input channel data for VAD & PCM forwarding
+          const boostedData = new Float32Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            boostedData[i] = Math.max(-1, Math.min(1, inputData[i] * 2.5));
+          }
+
           // 1. Process Voice Activity Level (VAD) for glowing visualizer
-          this._processVAD(inputData);
+          this._processVAD(boostedData);
 
           // 2. If connected to native Gemini Live API session, forward PCM
           if (this.isLiveApiMode && this.ws && this.ws.readyState === WebSocket.OPEN) {
             const pcm16Data = this._resampleAndEncodePCM16(
-              inputData,
+              boostedData,
               inputBuffer.sampleRate,
               this.options.inputSampleRate
             );
@@ -229,7 +243,7 @@
           }
         };
 
-        this.inputSource.connect(this.scriptProcessor);
+        this.inputPreGain.connect(this.scriptProcessor);
         const silentGain = this.audioContext.createGain();
         silentGain.gain.value = 0;
         this.scriptProcessor.connect(silentGain);
@@ -739,6 +753,10 @@
           this.scriptProcessor.disconnect();
           this.scriptProcessor = null;
         }
+        if (this.inputPreGain) {
+          this.inputPreGain.disconnect();
+          this.inputPreGain = null;
+        }
         if (this.inputSource) {
           this.inputSource.disconnect();
           this.inputSource = null;
@@ -876,10 +894,19 @@
     }
 
     setLanguage(langCode) {
+      const prevLang = this.selectedLang;
       this.selectedLang = (langCode && langCode !== 'auto') ? langCode : (navigator.language || 'en-US');
       console.log('[VoiceAssistant] Language configured to:', this.selectedLang);
       if (this.fallbackSpeechRecognition) {
         this.fallbackSpeechRecognition.lang = this.selectedLang;
+        if (prevLang !== this.selectedLang && !this.isMuted && this.state !== VoiceState.AI_SPEAKING && !this.isFallbackPlaying) {
+          try { this.fallbackSpeechRecognition.abort(); } catch (e) {}
+          setTimeout(() => {
+            if (!this.isMuted && this.state !== VoiceState.AI_SPEAKING && !this.isFallbackPlaying) {
+              try { this.fallbackSpeechRecognition.start(); } catch (e) {}
+            }
+          }, 80);
+        }
       }
     }
 
@@ -979,9 +1006,9 @@
       const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
       this._isSttRunning = false;
       this.fallbackSpeechRecognition = new SpeechRecognition();
-      // On mobile devices, continuous mode often suppresses interim transcripts until connection drops.
-      // Setting continuous to false on mobile ensures instant, responsive recognition and turn-taking.
-      this.fallbackSpeechRecognition.continuous = !isMobile;
+      // Setting continuous to false ensures Chrome triggers onresult/onend immediately upon pause
+      // and eliminates the desktop Chrome freeze where audio buffers stall until a no-speech error.
+      this.fallbackSpeechRecognition.continuous = false;
       this.fallbackSpeechRecognition.interimResults = true;
       this.fallbackSpeechRecognition.maxAlternatives = 1;
       this.fallbackSpeechRecognition.lang = this.selectedLang || 'hi-IN';
@@ -1050,7 +1077,7 @@
                 try { this.fallbackSpeechRecognition.stop(); } catch (e) {}
                 this.send(currentInterim);
               }
-            }, 600);
+            }, 500);
           }
         }
       };
@@ -1078,16 +1105,21 @@
       };
 
       this.fallbackSpeechRecognition.onerror = (e) => {
-        console.warn('[VoiceAssistant STT Error Event]:', e.error, e.message || '');
+        // no-speech is normal during pauses between turns; handle quietly without error noise
+        if (e.error !== 'no-speech') {
+          console.warn('[VoiceAssistant STT Error Event]:', e.error, e.message || '');
+        }
         if (this.state === VoiceState.USER_SPEAKING && !this.isMuted) {
           this._setState(VoiceState.LISTENING);
         }
-        // Auto-recover on non-fatal error with graceful backoff
+        // Seamless immediate restart on non-fatal pause errors
         if (e.error === 'no-speech' || e.error === 'network' || e.error === 'audio-capture') {
           if (this.state !== VoiceState.IDLE && !this.isMuted && this.state !== VoiceState.AI_SPEAKING && !this.isFallbackPlaying) {
             setTimeout(() => {
-              try { this.fallbackSpeechRecognition.start(); } catch (err) {}
-            }, 300);
+              if (this.state !== VoiceState.IDLE && !this.isMuted && this.state !== VoiceState.AI_SPEAKING && !this.isFallbackPlaying && !this._isSttRunning) {
+                try { this.fallbackSpeechRecognition.start(); } catch (err) {}
+              }
+            }, 100);
           }
         }
       };
@@ -1102,7 +1134,7 @@
                   this.fallbackSpeechRecognition.start();
                 } catch (e) {}
               }
-            }, 300);
+            }, 80);
           }
         }
       };
@@ -1113,7 +1145,7 @@
           try {
             this.fallbackSpeechRecognition.start();
           } catch (e) {}
-        }, 200);
+        }, 150);
       }
     }
 

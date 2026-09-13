@@ -194,6 +194,15 @@
       this.initEvents();
     }
 
+    updateRecognitionLanguage() {
+      if (!this.langSelect) return;
+      const lang = this.langSelect.value || 'hi-IN';
+      console.log('[Live Voice UI] Recognition language updated to:', lang);
+      if (this.voiceAssistant) {
+        this.voiceAssistant.setLanguage(lang);
+      }
+    }
+
     initEvents() {
       if (this.langSelect) {
         this.langSelect.addEventListener('change', () => {
