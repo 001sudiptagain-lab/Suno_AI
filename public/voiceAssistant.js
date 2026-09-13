@@ -614,8 +614,7 @@
           history: config.history || [],
           provider: config.provider || savedSettings.provider || 'gemini',
           apiKey: effectiveKey,
-          enableGeminiLive: false,
-          model: 'gemini-3.7-flash'
+          enableGeminiLive: true
         }));
 
         this._setState(VoiceState.LISTENING);
@@ -627,10 +626,10 @@
 
           switch (msg.type) {
             case 'session.ready':
-              this.isLiveApiMode = false;
-              console.log('[VoiceAssistant] Session established. Mode: High-Speed Streaming STT/TTS');
+              this.isLiveApiMode = !!msg.isGeminiLive;
+              console.log('[VoiceAssistant] Session established. Mode:', this.isLiveApiMode ? 'Gemini Live (Voice: Leda)' : 'High-Speed Streaming STT/TTS');
               
-              // Immediately start speech recognition pipeline right away!
+              // Initialize speech recognition for live speech transcription and analysis
               this._initFallbackSpeechRecognition();
               this._setState(VoiceState.LISTENING);
 
@@ -638,16 +637,28 @@
               if (!this._hasSpokenIntro && currentHistory.length === 0) {
                 this._hasSpokenIntro = true;
                 
-                let introGreeting = "नमस्ते! मैं SUNO AI हूँ। मुझे सुदीप्ता ने आपके भावनात्मक सहयोग और बातचीत के लिए ट्रेन किया है। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?";
-                if (this.selectedLang === 'en-US') {
-                  introGreeting = "Hello! I am SUNO AI, your compassionate companion. I was trained and created by Sudipta. How can I support you today?";
-                } else if (this.selectedLang === 'bn-IN') {
-                  introGreeting = "নমস্কার! আমি SUNO AI। আমাকে সুদীপ্তা তৈরি করেছেন আপনার মানসিক সমর্থন ও বন্ধুত্বের জন্য। বলুন, আজ আপনাকে কীভাবে সাহায্য করতে পারি?";
+                if (this.isLiveApiMode) {
+                  let introPrompt = "Please introduce yourself briefly in 1 warm sentence as SUNO AI.";
+                  if (this.selectedLang === 'hi-IN') {
+                    introPrompt = "कृपया एक छोटे और प्यारे वाक्य में SUNO AI के रूप में नमस्ते बोलें और स्वागत करें।";
+                  } else if (this.selectedLang === 'bn-IN') {
+                    introPrompt = "দয়া করে SUNO AI হিসেবে এক লাইনে মিষ্টি করে নমস্কার বলুন।";
+                  }
+                  this.ws.send(JSON.stringify({
+                    type: 'live.text_turn',
+                    text: introPrompt
+                  }));
+                } else {
+                  let introGreeting = "नमस्ते! मैं SUNO AI हूँ। मुझे सुदीप्ता ने आपके भावनात्मक सहयोग और बातचीत के लिए ट्रेन किया है। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?";
+                  if (this.selectedLang === 'en-US') {
+                    introGreeting = "Hello! I am SUNO AI, your compassionate companion. I was trained and created by Sudipta. How can I support you today?";
+                  } else if (this.selectedLang === 'bn-IN') {
+                    introGreeting = "নমস্কার! আমি SUNO AI। আমাকে সুদীপ্তা তৈরি করেছেন আপনার মানসিক সমর্থন ও বন্ধুত্বের জন্য। বলুন, আজ আপনাকে কীভাবে সাহায্য করতে পারি?";
+                  }
+                  this._lastAssistantSpokenText = introGreeting;
+                  this._emitTranscript('assistant', introGreeting, true);
+                  this._enqueueFallbackTTSChunk(introGreeting);
                 }
-                this._lastAssistantSpokenText = introGreeting;
-                this._emitTranscript('assistant', introGreeting, true);
-                
-                this._enqueueFallbackTTSChunk(introGreeting);
               }
               break;
 

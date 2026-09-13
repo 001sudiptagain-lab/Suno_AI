@@ -623,6 +623,7 @@ wss.on('connection', (ws) => {
   let liveAudioQueue = [];
   let userApiKey = '';
   let userProvider = 'gemini';
+  let liveTurnAccumulator = '';
 
   let sessionHistory = [
     {
@@ -726,12 +727,8 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
                 }
 
                 if (sc.modelTurn && sc.modelTurn.parts) {
-                  console.log('[Live] AI response started');
-
                   for (const part of sc.modelTurn.parts) {
                     if (part.inlineData && part.inlineData.data) {
-                      console.log('[Live] AI audio received');
-
                       if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({
                           type: 'live.audio_delta',
@@ -743,8 +740,7 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
                     }
 
                     if (part.text) {
-                      console.log(`[Live] AI text received: ${part.text.substring(0, 40)}...`);
-
+                      liveTurnAccumulator += part.text;
                       if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({
                           type: 'live.audio_delta',
@@ -755,18 +751,33 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
                   }
                 }
 
+                if (sc.outputTranscription) {
+                  const outText = sc.outputTranscription.text || '';
+                  if (outText) {
+                    liveTurnAccumulator += (liveTurnAccumulator ? ' ' : '') + outText;
+                    if (ws.readyState === WebSocket.OPEN) {
+                      ws.send(JSON.stringify({
+                        type: 'live.audio_delta',
+                        text: outText
+                      }));
+                    }
+                  }
+                }
+
                 if (sc.generationComplete) {
                   console.log('[Live] Generation complete.');
                 }
 
                 if (sc.turnComplete) {
-                  console.log('[Live] User turn complete.');
+                  console.log('[Live] User turn complete. Spoken text:', liveTurnAccumulator);
 
                   if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
-                      type: 'live.turn_complete'
+                      type: 'live.turn_complete',
+                      fullText: liveTurnAccumulator.trim()
                     }));
                   }
+                  liveTurnAccumulator = '';
                 }
 
                 if (sc.interrupted) {
@@ -816,6 +827,13 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
 
         config: {
           responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: 'Leda'
+              }
+            }
+          },
           contextWindowCompression: {
             slidingWindow: {}
           },
@@ -824,7 +842,7 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
             : {},
           systemInstruction: {
             parts: [{
-              text: "You are Aura Live, an ultra-fast, intelligent, natural voice AI. Talk directly, warmly, and concisely in 1-2 spoken sentences. Do not read raw markdown syntax."
+              text: "You are SUNO AI with the Leda voice, an ultra-fast, intelligent, deeply caring and natural voice AI created by Sudipta. Speak directly, warmly, and concisely in 1-2 spoken sentences. Do not read raw markdown syntax."
             }]
           }
         }
