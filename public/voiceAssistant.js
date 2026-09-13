@@ -81,6 +81,7 @@
       this.currentUtterance = null;
       this.interimDebounceTimer = null;
       this._hasSpokenIntro = false;
+      this._hasReceivedLiveAudio = false;
 
       // Analyser Shared State
       this.inputFreqData = new Uint8Array(64);
@@ -528,6 +529,7 @@
     // ==========================================
     interrupt() {
       console.log('[VoiceAssistant] Barge-in / Interruption triggered.');
+      this._hasReceivedLiveAudio = false;
       this._stopAllAudioPlayback();
 
       // Notify WebSocket backend to immediately abort model turn / flush server audio buffers
@@ -671,8 +673,13 @@
               break;
 
             case 'live.audio_delta':
-              // Streaming 24kHz PCM from Gemini Live
+              // Streaming 24kHz PCM from Gemini Live (Voice: Leda)
               if (msg.pcmBase64) {
+                this._hasReceivedLiveAudio = true;
+                // Immediately silence any background browser SpeechSynthesis to prevent overlap
+                if (window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+                  try { window.speechSynthesis.cancel(); } catch (_) {}
+                }
                 this._enqueueIncomingPCMChunk(msg.pcmBase64, msg.sampleRate || 24000);
               }
               if (msg.text) {
@@ -688,7 +695,8 @@
               if (msg.fullText) {
                 const cleanFull = msg.fullText.replace(/\*\*Crafting[^*]+\*\*/gi, '').replace(/\*\*Thinking[^*]+\*\*/gi, '').trim();
                 this._emitTranscript('assistant', cleanFull, true);
-                if (!this.isPlayingQueue && this.audioQueue.length === 0 && cleanFull) {
+                // ONLY trigger fallback TTS if we never received native Live PCM audio (prevents voice overlap!)
+                if (!this._hasReceivedLiveAudio && !this.isPlayingQueue && this.audioQueue.length === 0 && cleanFull) {
                   this._enqueueFallbackTTSChunk(cleanFull);
                 }
               }
@@ -855,6 +863,12 @@
       if (typeof content === 'string') {
         this._emitTranscript('user', content, true);
         this._setState(VoiceState.THINKING);
+        this._hasReceivedLiveAudio = false;
+
+        // Cancel any lingering browser SpeechSynthesis to ensure no overlaps
+        if (window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+          try { window.speechSynthesis.cancel(); } catch (_) {}
+        }
 
         if (this.isLiveApiMode) {
           this.ws.send(JSON.stringify({
@@ -1165,6 +1179,12 @@
 
     _enqueueFallbackTTSChunk(text) {
       if (!text) return;
+      // If Gemini Live is active and currently playing or recently received PCM audio, suppress browser TTS
+      if (this.isLiveApiMode && (this._hasReceivedLiveAudio || this.isPlayingQueue || this.audioQueue.length > 0)) {
+        console.log('[VoiceAssistant] Suppressed fallback TTS chunk because Gemini Live PCM audio is active.');
+        return;
+      }
+
       const clean = text.replace(/\*\*Crafting[^*]+\*\*/gi, '')
                         .replace(/\*\*Thinking[^*]+\*\*/gi, '')
                         .replace(/\[TOOL:[^\]]+\]/g, '')
