@@ -150,6 +150,9 @@
               if (this.vdLatencyVal) {
                 this.vdLatencyVal.textContent = `${latencySec}s`;
               }
+              if (isFinal) {
+                this.turnStartTime = null;
+              }
             }
             if (this.transcriptAi) {
               if (isFinal) {
@@ -1147,43 +1150,68 @@
       joyKeywords.forEach(w => { if (fullContextLower.includes(w)) contextJoy++; });
 
       // 3. Page 2 Critical Clinical Safety Triggers (NHAA Triage Protocol)
+      // Critical Clinical Safety Triggers (NHAA Triage Protocol)
       // Suicide & Suicidal Ideation: Multilingual coverage (English, Hindi/Hinglish, Bengali, Devanagari)
       const suicidePhrases = [
         'suicid', 'kill myself', 'killing myself', 'want to die', 'wanna die', 'end my life',
         'ending my life', 'take my life', 'better off dead', 'no reason to live', 'hang myself',
         'hanging myself', 'slit my wrist', 'cut my wrist', 'overdose', 'jump off', 'end it all',
         'wish i was dead', 'wished i was dead', "don't want to live", 'dont want to live',
-        'tired of living', 'i will die', 'ready to die',
+        'tired of living', 'i will die', 'ready to die', 'die alone',
         // Hindi / Hinglish
         'mar jana', 'marne ka man', 'marna chahta', 'marna chahti', 'marna hai', 'mar jau',
         'mar jaunga', 'mar jaungi', 'jeena nahi chahta', 'jeena nahi chahti', 'jeena nahi hai',
         'jaan de dunga', 'jaan de dungi', 'aatmhatya', 'atmahatya', 'khudkushi', 'khud kushi',
         'apna jeevan samapt', 'zindagi khatam', 'chhat se kood', 'zeher kha', 'zehar kha',
-        'khud ko khatam',
+        'khud ko khatam', 'susaid', 'suiside',
         // Devanagari Hindi Script
         'सुसाइड', 'आत्महत्या', 'खुदकुशी', 'मर जाना', 'मरने का मन', 'मरना चाहता', 'मरना चाहती',
         'मरना है', 'मर जाऊं', 'मर जाऊंगा', 'मर जाऊंगी', 'जीना नहीं चाहता', 'जीना नहीं चाहती',
         'जीना नहीं है', 'जान दे दूंगा', 'जान दे दूंगी', 'जिंदगी खत्म', 'जहर खा', 'फांसी लगा',
         // Bengali
         'morte chai', 'more jabo', 'aar bachte chai na', 'aar baachte chai na', 'jeebon sesh',
-        'jeevan sesh kore debo', 'aattohotta', 'attohotta', 'morar ichha'
+        'jeevan sesh kore debo', 'aattohotta', 'attohotta', 'morar ichha', 'মরতে চাই', 'মরে যাব', 'আত্মহত্যা'
       ];
 
-      // Self-Harm triggers
+      // Self-Harm triggers: cutting, burning, poisoning, hitting self, injuring self (English, Hindi, Hinglish, Bengali)
       const selfHarmPhrases = [
         'cut myself', 'cutting myself', 'hurt myself', 'hurting myself', 'harm myself', 'harming myself',
-        'burn myself', 'bleeding myself', 'khud ko chot', 'apne aap ko chot', 'apne ko chot',
-        'khud ko takleef', 'apne hath kaat', 'haath kaat',
-        'खुद को चोट', 'अपने आप को चोट', 'हाथ काट', 'नस काट'
+        'burn myself', 'burning myself', 'bleeding myself', 'injure myself', 'injuring myself', 'punish myself',
+        'scratch myself', 'hit myself', 'pain myself', 'inflict pain', 'bleed myself', 'blade on my skin',
+        'slit', 'wrist cut', 'cut my arm', 'cut my wrist', 'cut my leg', 'blade se', 'chaku se kaat',
+        // Hindi / Hinglish
+        'khud ko chot', 'apne aap ko chot', 'apne ko chot', 'khud ko nuksan', 'apne aap ko nuksan',
+        'khud ko takleef', 'khud ko dard', 'apne hath kaat', 'haath kaat', 'haath kat', 'nus kaat',
+        'nas kaat', 'chaku se hath', 'blade marna', 'blade se kaat', 'khud ko jalana', 'apne ko jalaya',
+        'khud ko marunga', 'apne aap ko marunga', 'khud ko zakhmi',
+        // Devanagari Hindi Script
+        'खुद को चोट', 'अपने आप को चोट', 'हाथ काट', 'नस काट', 'नस काटना', 'ब्लेड', 'खुद को नुकसान',
+        'खुद को दर्द', 'खुद को तकलीफ', 'चाकू से काट', 'खुद को जलाना', 'अपने हाथ पर कट', 'जख्मी करना',
+        // Bengali
+        'nije ke aghat', 'nije kosto dewa', 'haat kata', 'rokto ber kora', 'nijeke kosto',
+        'হাত কাটা', 'নিজেকে আঘাত', 'রক্ত বের করা', 'নিজেকে কষ্ট'
       ];
 
-      // Threat / Violence triggers
-      // Threat / Violence triggers
+      // Threat / Violence / Intimidation triggers (English, Hindi, Hinglish, Bengali)
       const threatPhrases = [
-        'kill you', 'destroy you', 'harm you', 'mar dunga', 'jaan se maar', 'goli maar',
-        'outside my house', 'attacking me', 'breaking into', 'chaku', 'knife', 'bandook', 'gun',
-        'police bula', 'dhamki de raha', 'threaten', 'rape', 'murder',
-        'मार दूंगा', 'जान से मार', 'गोली मार', 'धमकी'
+        'kill you', 'destroy you', 'harm you', 'shoot you', 'hurt you', 'beat you', 'stab you',
+        'outside my house', 'outside your house', 'attacking me', 'breaking into', 'chaku', 'knife',
+        'bandook', 'gun', 'police bula', 'threat', 'threaten', 'threatened', 'threatening',
+        'intimidation', 'intimidate', 'intimidated', 'intimidating', 'blackmail', 'blackmailing',
+        'blackmailed', 'stalking', 'stalk', 'stalker', 'harass', 'harassment', 'harassing',
+        'abuse', 'abusing', 'physical abuse', 'assault', 'assaulting', 'weapon', 'danger to my life',
+        'somebody is following', 'someone is following', 'following me', 'chasing me', 'force me',
+        // Hindi / Hinglish
+        'mar dunga', 'maar dunga', 'maar dalunga', 'jaan se maar', 'goli maar', 'dhamki',
+        'dhamki de raha', 'dhamki di', 'darana', 'dara raha hai', 'dekh lunga', 'barbaad kar dunga',
+        'barbad kar dunga', 'pit dunga', 'maar peet', 'chaku dikha raha', 'piche pada hai',
+        'picha kar raha hai', 'blackmail kar raha', 'badla lunga', 'teri jaan le lunga',
+        // Devanagari Hindi Script
+        'मार दूंगा', 'मार डालूंगा', 'जान से मार', 'गोली मार', 'धमकी', 'धमकी दे रहा', 'डरा रहा है',
+        'देख लूँगा', 'बर्बाद कर दूंगा', 'चाकू', 'पिस्तौल', 'बंदूक', 'ब्लैकमेल', 'पीछा कर रहा',
+        // Bengali
+        'toke mere phelbo', 'mere phelbo', 'bhoy dekhacche', 'dhamki dicche', 'khun kore debo',
+        'boma', 'marpeet', 'অ্যাসিড', 'খুন করে দেব', 'ভয় দেখাচ্ছে', 'মারব'
       ];
 
       // Safety Recovery & Reassurance triggers (English, Hindi/Hinglish, Bengali, Devanagari)

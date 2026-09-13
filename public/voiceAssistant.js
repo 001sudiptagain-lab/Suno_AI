@@ -687,6 +687,7 @@
               break;
 
             case 'response.start':
+              this._hasStreamedAudioChunks = false;
               this._setState(VoiceState.THINKING);
               break;
 
@@ -696,6 +697,7 @@
 
             case 'response.audio_chunk':
               if (msg.text) {
+                this._hasStreamedAudioChunks = true;
                 this._enqueueFallbackTTSChunk(msg.text);
               }
               break;
@@ -705,12 +707,13 @@
               if (msg.voiceStyle) {
                 this.currentVoiceStyle = msg.voiceStyle;
               }
-              // Only enqueue if not already queued via response.audio_chunk
-              if (msg.text && this.fallbackSpeechQueue.length === 0 && !this.isFallbackPlaying) {
+              // If no sentence chunks were streamed yet, play the full text
+              if (!this._hasStreamedAudioChunks && msg.text && this.fallbackSpeechQueue.length === 0 && !this.isFallbackPlaying) {
                 this._enqueueFallbackTTSChunk(msg.text, msg.voiceStyle);
               } else if (!this.isFallbackPlaying && this.fallbackSpeechQueue.length === 0) {
                 this._setState(VoiceState.LISTENING);
               }
+              this._hasStreamedAudioChunks = false;
               break;
 
             case 'interruption.ack':
@@ -1077,7 +1080,7 @@
                 try { this.fallbackSpeechRecognition.stop(); } catch (e) {}
                 this.send(currentInterim);
               }
-            }, 500);
+            }, 260);
           }
         }
       };

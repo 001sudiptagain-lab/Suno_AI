@@ -302,14 +302,10 @@ app.post('/api/chat', async (req, res) => {
     try {
       if (provider === 'gemini' || !provider || provider === 'builtin') {
         const candidateModels = [
-          'gemini-3.6-flash',
-          'gemini-3.7-flash',
-          'gemini-3.8-flash',
           'gemini-3.1-flash-lite',
-          'gemini-3.5-flash-lite',
-          'gemini-flash-lite-latest',
+          'gemini-flash-latest',
           'gemini-3-flash-preview',
-          'gemini-flash-latest'
+          'gemini-flash-lite-latest'
         ];
         
         const basePersonaGuidelines = `
@@ -1047,12 +1043,16 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
     });
 
     let liveVoiceWebContext = '';
-    try {
-      liveVoiceWebContext = await Promise.race([
-        fetchLiveWebData(userText),
-        new Promise(resolve => setTimeout(() => resolve(''), 3000))
-      ]);
-    } catch (_) {}
+    const isSearchExplicit = /weather|temperature|who is|what is|when is|latest news|today's news|live score/i.test(userText);
+    if (isSearchExplicit) {
+      try {
+        liveVoiceWebContext = await Promise.race([
+          fetchLiveWebData(userText),
+          new Promise(resolve => setTimeout(() => resolve(''), 800))
+        ]);
+      } catch (_) {}
+    }
+
     sessionHistory.push({ role: 'user', content: userText });
     ws.send(JSON.stringify({ 
       type: 'response.start',
@@ -1068,14 +1068,10 @@ async function initGeminiLiveSession(apiKey, isResume = false) {
 
       if (effectiveKey && (userProvider === 'gemini' || !userProvider || userProvider === 'builtin')) {
         const candidateModels = [
-          'gemini-3.6-flash',
-          'gemini-3.7-flash',
-          'gemini-3.8-flash',
           'gemini-3.1-flash-lite',
-          'gemini-3.5-flash-lite',
-          'gemini-flash-lite-latest',
+          'gemini-flash-latest',
           'gemini-3-flash-preview',
-          'gemini-flash-latest'
+          'gemini-flash-lite-latest'
         ];
         
         let systemVoicePrompt = `You are SUNO AI, an emotionally perceptive, deeply caring, and warm AI companion created and trained by Sudipta.
@@ -1138,11 +1134,34 @@ VOICE & EMOTIONAL EXPRESSION RULES:
                         if (token) {
                           fullResponse += token;
                           ws.send(JSON.stringify({ type: 'response.delta', token }));
+
+                          sentenceBuffer += token;
+                          // Real-time zero-latency sentence streaming: detect punctuation boundary or ~10 words
+                          const match = sentenceBuffer.match(/^(.*?[.!?।\n]+)([\s\S]*)$/);
+                          if (match) {
+                            const chunkToSpeak = match[1].trim();
+                            sentenceBuffer = match[2] || '';
+                            if (chunkToSpeak && !chunkToSpeak.startsWith('[TOOL:')) {
+                              ws.send(JSON.stringify({
+                                type: 'response.audio_chunk',
+                                text: chunkToSpeak
+                              }));
+                            }
+                          }
                         }
                       }
                     } catch (e) {}
                   }
                 }
+              }
+
+              // Flush remaining sentence buffer if any
+              if (sentenceBuffer.trim() && !sentenceBuffer.trim().startsWith('[TOOL:')) {
+                ws.send(JSON.stringify({
+                  type: 'response.audio_chunk',
+                  text: sentenceBuffer.trim()
+                }));
+                sentenceBuffer = '';
               }
             } else {
               console.warn(`[Gemini API] Model ${modelName} returned status ${geminiRes.status}, attempting fallback model...`);
