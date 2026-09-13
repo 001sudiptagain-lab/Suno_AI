@@ -1050,14 +1050,15 @@
       };
 
       this.fallbackSpeechRecognition.onspeechstart = () => {
+        console.log('[VoiceAssistant STT Event] onspeechstart detected from user.');
         if (this.isMuted || this.state === VoiceState.AI_SPEAKING || this.isFallbackPlaying) {
           return;
         }
-        console.log('[VoiceAssistant STT] Speech start detected from user.');
         this._setState(VoiceState.USER_SPEAKING);
       };
 
       this.fallbackSpeechRecognition.onsoundstart = () => {
+        console.log('[VoiceAssistant STT Event] onsoundstart (sound detected on mic stream).');
         if (this.isMuted || this.state === VoiceState.AI_SPEAKING || this.isFallbackPlaying) {
           return;
         }
@@ -1067,18 +1068,16 @@
       };
 
       this.fallbackSpeechRecognition.onspeechend = () => {
-        console.log('[VoiceAssistant STT] Speech ended.');
+        console.log('[VoiceAssistant STT Event] onspeechend.');
       };
 
       this.fallbackSpeechRecognition.onerror = (e) => {
-        if (e.error !== 'no-speech' && e.error !== 'aborted') {
-          console.warn('[VoiceAssistant Fallback STT Error]:', e.error);
-        }
+        console.warn('[VoiceAssistant STT Error Event]:', e.error, e.message || '');
         if (this.state === VoiceState.USER_SPEAKING && !this.isMuted) {
           this._setState(VoiceState.LISTENING);
         }
         // Auto-recover on non-fatal error with graceful backoff
-        if (e.error === 'no-speech' || e.error === 'network') {
+        if (e.error === 'no-speech' || e.error === 'network' || e.error === 'audio-capture') {
           if (this.state !== VoiceState.IDLE && !this.isMuted && this.state !== VoiceState.AI_SPEAKING && !this.isFallbackPlaying) {
             setTimeout(() => {
               try { this.fallbackSpeechRecognition.start(); } catch (err) {}
